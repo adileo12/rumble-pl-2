@@ -1,21 +1,30 @@
-async function call(path: string) {
-  'use server';
-  const res = await fetch(path, { method: 'POST' });
-  return await res.json();
-}
+"use client";
+
+import { useState } from "react";
 
 export default function Admin() {
+  const [msg, setMsg] = useState<string>("");
+
+  async function call(path: string) {
+    try {
+      setMsg("Running...");
+      const res = await fetch(path, { method: "POST" });
+      const json = await res.json();
+      setMsg(JSON.stringify(json));
+    } catch (e: any) {
+      setMsg(e?.message ?? "error");
+    }
+  }
+
   return (
     <main>
       <h2>Admin</h2>
-      <form action={async () => { await call('/api/admin/seed'); }}>
-        <button type="submit">Seed DB (Clubs + Season)</button>
-      </form>
-      <form action={async () => { await call('/api/fixtures/sync'); }}>
-        <button type="submit" style={{ marginTop: 12 }}>Sync Fixtures (FPL)</button>
-      </form>
+      <button onClick={() => call("/api/admin/seed")}>Seed DB (Clubs + Season)</button>
+      <button style={{ marginLeft: 12 }} onClick={() => call("/api/fixtures/sync")}>
+        Sync Fixtures (FPL)
+      </button>
       <p style={{ marginTop: 12 }}>1) Seed → 2) Sync Fixtures → check /api/status.</p>
-      <p>Note: This MVP leaves auth/picks/jokers for the next step.</p>
+      <pre style={{ whiteSpace: "pre-wrap", background: "#f6f6f6", padding: 8 }}>{msg}</pre>
     </main>
   );
 }
