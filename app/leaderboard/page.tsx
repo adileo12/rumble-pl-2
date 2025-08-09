@@ -1,4 +1,7 @@
-import { db } from '../../src/lib/db';
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+import { db } from '@/src/lib/db';
 
 
 export default async function Leaderboard() {
