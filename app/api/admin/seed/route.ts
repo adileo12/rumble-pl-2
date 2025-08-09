@@ -27,12 +27,24 @@ export async function POST() {
     ];
 
     for (const c of clubs) {
-      await db.club.upsert({
-        where: { shortName: c.shortName },           // shortName is stable for us
-        update: { name: c.name, active: true },      // fplTeamId will be set by sync
-        create: { id: crypto.randomUUID(), name: c.name, shortName: c.shortName, active: true }
-      });
-    }
+  const result = await db.club.updateMany({
+    where: { shortName: c.shortName },
+    data: { name: c.name, active: true }
+  });
+
+  if (result.count === 0) {
+    await db.club.create({
+      data: {
+        id: crypto.randomUUID(),
+        name: c.name,
+        shortName: c.shortName,
+        active: true
+        // fplTeamId will be set later by sync via fetchFplTeams()
+      }
+    });
+  }
+}
+
 
     const year = new Date().getUTCFullYear();
     const existing = await db.season.findFirst({ where: { isActive: true } });
