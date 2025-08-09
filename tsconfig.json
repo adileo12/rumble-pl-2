@@ -1,26 +1,25 @@
 {
   "compilerOptions": {
-    "target": "es5",
-    "lib": ["dom", "dom.iterable", "esnext"],
-    "allowJs": true,
+    "target": "ES2020",
+    "lib": ["dom", "dom.iterable", "es2020"],
+    "downlevelIteration": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "strict": true,
     "skipLibCheck": true,
-    "strict": false,
-    "forceConsistentCasingInFileNames": true,
     "noEmit": true,
     "esModuleInterop": true,
-    "module": "esnext",
-    "moduleResolution": "node",
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "preserve",
     "incremental": true,
-
-   "baseUrl": ".",
+    "baseUrl": ".",
     "paths": {
       "@/*": ["*"],
       "@/src/*": ["src/*"]
-    }
+    },
+    "types": ["node"]
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx"],
+  "include": ["next-env.d.ts", ".next/types/**/*.ts", "**/*.ts", "**/*.tsx"],
   "exclude": ["node_modules"]
 }
