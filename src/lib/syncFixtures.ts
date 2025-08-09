@@ -1,5 +1,5 @@
 import { db } from './db';
-import { fetchFplFixtures } from './fpl';
+import { fetchFplFixtures, fetchFplTeams } from './fpl';
 
 export async function syncFixturesForActiveSeason() {
   const season = await db.season.findFirst({ where: { isActive: true } });
