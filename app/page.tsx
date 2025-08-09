@@ -1,5 +1,9 @@
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 import { db } from '@/src/lib/db';
 import { formatIst } from '@/src/lib/time';
+
 
 export default async function Page() {
   const season = await db.season.findFirst({ where: { isActive: true } });
