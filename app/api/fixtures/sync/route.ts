@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-//- import { syncFixturesForActiveSeason } from '@/src/lib/syncFixtures';
-+ import { syncFixturesForActiveSeason } from '../../../../src/lib/syncFixtures';
+import { syncFixturesForActiveSeason } from '../../../../src/lib/syncFixtures';
 
 
 export async function POST() {
