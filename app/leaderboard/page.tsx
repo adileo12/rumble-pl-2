@@ -1,4 +1,6 @@
-import { db } from '@/src/lib/db';
+- import { db } from '@/src/lib/db';
++ import { db } from '../../src/lib/db';
+
 
 export default async function Leaderboard() {
   const season = await db.season.findFirst({ where: { isActive: true } });
