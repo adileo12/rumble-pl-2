@@ -29,10 +29,10 @@ export async function POST() {
 
     for (const c of clubs) {
       await db.club.upsert({
-        where: { shortName: c.shortName },
-        update: { name: c.name, fplTeamId: c.fplTeamId, active: true },
-        create: { id: crypto.randomUUID(), name: c.name, shortName: c.shortName, active: true, fplTeamId: c.fplTeamId }
-      });
+  where: { fplTeamId: c.fplTeamId },
+  update: { name: c.name, shortName: c.shortName, active: true },
+  create: { id: crypto.randomUUID(), name: c.name, shortName: c.shortName, active: true, fplTeamId: c.fplTeamId }
+});
     }
 
     const year = new Date().getUTCFullYear();
