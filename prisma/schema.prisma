@@ -1,0 +1,135 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String        @id @default(uuid())
+  displayName  String
+  joinCode     String        @unique
+  isAdmin      Boolean       @default(false)
+  createdAt    DateTime      @default(now())
+  picks        Pick[]
+  statuses     UserStatus[]
+  sessions     Session[]
+  jokerUsages  JokerUsage[]
+}
+
+model Season {
+  id                String            @id @default(uuid())
+  name              String
+  year              Int
+  isActive          Boolean           @default(true)
+  gameweeks         Gameweek[]
+  statuses          UserStatus[]
+  jokerAssignments  JokerAssignment[]
+}
+
+model Gameweek {
+  id                String          @id @default(uuid())
+  seasonId          String
+  number            Int
+  deadline          DateTime
+  isLocked          Boolean         @default(false)
+  graded            Boolean         @default(false)
+  season            Season          @relation(fields: [seasonId], references: [id])
+  picks             Pick[]
+  fixtures          Fixture[]
+  jokerAssignments  JokerAssignment[]
+  jokerUsages       JokerUsage[]
+
+  @@unique([seasonId, number], name: "seasonId_number")
+}
+
+model Club {
+  id                String        @id @default(uuid())
+  name              String
+  shortName         String
+  crestUrl          String?
+  active            Boolean       @default(true)
+  fplTeamId         Int?          @unique
+  picks             Pick[]
+  homeFix           Fixture[]     @relation("HomeClub")
+  awayFix           Fixture[]     @relation("AwayClub")
+  jokerAssignments  JokerAssignment[]
+  jokerUsages       JokerUsage[]
+}
+
+model Fixture {
+  id           String   @id @default(uuid())
+  gameweekId   String
+  homeClubId   String
+  awayClubId   String
+  kickoff      DateTime
+  homeGoals    Int?
+  awayGoals    Int?
+  status       String
+  gameweek     Gameweek @relation(fields: [gameweekId], references: [id])
+  homeClub     Club     @relation("HomeClub", fields: [homeClubId], references: [id])
+  awayClub     Club     @relation("AwayClub", fields: [awayClubId], references: [id])
+}
+
+model Pick {
+  id          String   @id @default(uuid())
+  userId      String
+  gameweekId  String
+  clubId      String
+  createdAt   DateTime @default(now())
+  source      String   @default("USER")
+  user        User     @relation(fields: [userId], references: [id])
+  gameweek    Gameweek @relation(fields: [gameweekId], references: [id])
+  club        Club     @relation(fields: [clubId], references: [id])
+
+  @@unique([userId, gameweekId], name: "userId_gameweekId")
+}
+
+model UserStatus {
+  id                  String   @id @default(uuid())
+  userId              String
+  seasonId            String
+  isAlive             Boolean  @default(true)
+  eliminatedGw        Int?
+  jokerLifelinesLeft  Int      @default(2)
+  lastUpdated         DateTime @default(now())
+  user                User     @relation(fields: [userId], references: [id])
+  season              Season   @relation(fields: [seasonId], references: [id])
+
+  @@unique([userId, seasonId], name: "userId_seasonId")
+}
+
+model Session {
+  id         String   @id @default(uuid())
+  userId     String
+  token      String   @unique
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id])
+}
+
+model JokerAssignment {
+  id          String   @id @default(uuid())
+  seasonId    String
+  gameweekId  String
+  clubId      String
+  createdAt   DateTime @default(now())
+  season      Season   @relation(fields: [seasonId], references: [id])
+  gameweek    Gameweek @relation(fields: [gameweekId], references: [id])
+  club        Club     @relation(fields: [clubId], references: [id])
+
+  @@unique([seasonId, gameweekId], name: "seasonId_gameweekId")
+}
+
+model JokerUsage {
+  id          String   @id @default(uuid())
+  userId      String
+  gameweekId  String
+  clubId      String
+  pickedAt    DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id])
+  gameweek    Gameweek @relation(fields: [gameweekId], references: [id])
+  club        Club     @relation(fields: [clubId], references: [id])
+}
