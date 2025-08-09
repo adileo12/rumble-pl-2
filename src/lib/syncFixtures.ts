@@ -1,10 +1,31 @@
 import { db } from './db';
-import { fetchFplFixtures } from './fpl';
+import { fetchFplFixtures, fetchFplTeams } from './fpl';
+
+function norm(s: string) {
+  return s.toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]+/g, '');
+}
 
 export async function syncFixturesForActiveSeason() {
   const season = await db.season.findFirst({ where: { isActive: true } });
   if (!season) throw new Error("No active season");
 
+  // 1) Make sure clubs have correct fplTeamId for current season
+  const teams = await fetchFplTeams();
+  const mapByShort = new Map(teams.map(t => [t.short_name.toUpperCase(), t.id]));
+  const mapByName = new Map(teams.map(t => [norm(t.name), t.id]));
+
+  const clubs = await db.club.findMany();
+  for (const c of clubs) {
+    if (c.fplTeamId) continue;
+    const fromShort = mapByShort.get(c.shortName.toUpperCase());
+    const fromName = mapByName.get(norm(c.name));
+    const id = fromShort ?? fromName;
+    if (id) {
+      await db.club.update({ where: { id: c.id }, data: { fplTeamId: id } });
+    }
+  }
+
+  // 2) Fetch fixtures and upsert
   const raw = await fetchFplFixtures();
   const byGw = new Map<number, any[]>();
   for (const f of raw) {
@@ -47,9 +68,13 @@ export async function syncFixturesForActiveSeason() {
       });
     }
 
-    const kicks = fixtures.filter(f=>f.kickoff_time).map(f=>new Date(f.kickoff_time!)).sort((a,b)=>a.getTime()-b.getTime());
+    // 3) Deadline = 30 min before first kick of the GW
+    const kicks = fixtures
+      .filter(f => f.kickoff_time)
+      .map(f => new Date(f.kickoff_time!))
+      .sort((a, b) => a.getTime() - b.getTime());
     if (kicks.length) {
-      const deadline = new Date(kicks[0].getTime() - 30*60*1000);
+      const deadline = new Date(kicks[0].getTime() - 30 * 60 * 1000);
       await db.gameweek.update({ where: { id: gw.id }, data: { deadline } });
     }
   }
