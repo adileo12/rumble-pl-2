@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/src/lib/db';
-import { formatIst } from '@/src/lib/time';
+- import { db } from '@/src/lib/db';
+- import { formatIst } from '@/src/lib/time';
++ import { db } from '../../../src/lib/db';
++ import { formatIst } from '../../../src/lib/time';
+
 
 export async function GET() {
   try {
