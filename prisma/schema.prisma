@@ -81,6 +81,7 @@ model Fixture {
 model Pick {
   id          String   @id @default(uuid())
   userId      String
+  seasonId    String 
   gameweekId  String
   clubId      String
   createdAt   DateTime @default(now())
