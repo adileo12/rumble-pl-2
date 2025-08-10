@@ -21,14 +21,15 @@ export default async function PlayPage() {
  const fixtures = await db.fixture.findMany({
   where: {
     gameweekId: gw.id,
-    gameweek: { seasonId: season.id } // uses relation instead of seasonId column
+    // Filter by season through the relation instead of a seasonId column
+    gameweek: { seasonId: season.id },
   },
-}),
-    include: { 
-      // If you have relations set up, otherwise join manually
-    },
-    orderBy: { kickoff: 'asc' }
-  });
+  include: {
+    homeClub: true,
+    awayClub: true,
+  },
+  orderBy: { kickoff: 'asc' },
+});
 
   const clubs = await db.club.findMany({ where: { active: true }, orderBy: { name: 'asc' } });
   const used = await clubsYouAlreadyPicked(user.id, season.id);
