@@ -18,8 +18,12 @@ export default async function PlayPage() {
 
   const locked = await isLockedForGW(season.id, gw.id);
 
-  const fixtures = await db.fixture.findMany({
-    where: { seasonId: season.id, gameweekId: gw.id },
+ const fixtures = await db.fixture.findMany({
+  where: {
+    gameweekId: gw.id,
+    gameweek: { seasonId: season.id } // uses relation instead of seasonId column
+  },
+}),
     include: { 
       // If you have relations set up, otherwise join manually
     },
