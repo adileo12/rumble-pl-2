@@ -36,7 +36,7 @@ export async function POST(req: Request) {
     const pick = await db.pick.upsert({
       where: { userId_gameweekId: { userId: user.id, gameweekId: gw.id } },
       update: { clubId },
-       create: { userId: user.id, gameweekId: gw.id, clubId }
+       create: { userId: user.id,seasonId: season.id, gameweekId: gw.id, clubId }
     });
 
     return NextResponse.json({ ok: true, pick });
