@@ -1,41 +1,18 @@
-// app/api/auth/login/route.ts
-import { NextResponse } from 'next/server';
-import { db } from '@/src/lib/db';
-import crypto from 'crypto';
+import { NextResponse } from "next/server";
+import { db } from "@/src/lib/db";
 
 export async function POST(req: Request) {
-  const { secretCode, name } = await req.json();
-
+  const { secretCode } = await req.json();
   if (!secretCode) {
-    return NextResponse.json({ ok: false, error: 'secretCode required' }, { status: 400 });
+    return NextResponse.json({ ok: false, error: "secretCode is required" }, { status: 400 });
   }
-
-  // Look up by unique secretCode
-  let user = await db.user.findUnique({ where: { secretCode } }).catch(() => null);
-
+  const user = await db.user.findFirst({ where: { secretCode } });
   if (!user) {
-    if (!name) {
-      return NextResponse.json(
-        { ok: false, error: 'name required for first login' },
-        { status: 400 }
-      );
-    }
-
-    // generate a short join code (6 uppercase chars)
-    const joinCode =
-      crypto.randomBytes(4).toString('base64').replace(/[^A-Z0-9]/gi, '').slice(0, 6).toUpperCase() ||
-      Math.random().toString(36).slice(2, 8).toUpperCase();
-
-    user = await db.user.create({
-      data: {
-        name,
-        displayName: name,     // satisfy required field
-        joinCode,              // satisfy required field
-        secretCode,
-      },
-    });
+    return NextResponse.json({ ok: false, error: "Invalid code" }, { status: 401 });
   }
 
-  // …set cookie / session as you already do
-  return NextResponse.json({ ok: true, userId: user.id });
+  // set your session cookie, or return success
+  const res = NextResponse.json({ ok: true, user: { id: user.id, displayName: (user as any).displayName } });
+  // res.cookies.set("sid", user.id, { httpOnly: true, sameSite: "lax", maxAge: 60*60*24*30 });
+  return res;
 }
