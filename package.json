@@ -2,12 +2,12 @@
   "name": "rumble-pl",
   "version": "1.2.0",
   "private": true,
- "scripts": {
-  "dev": "next dev",
-  "build": "npx prisma generate && npx prisma migrate deploy && next build",
-  "start": "next start",
-  "postinstall": "prisma generate"
-}
+  "scripts": {
+    "dev": "next dev",
+    "build": "npx prisma generate && npx prisma migrate deploy && next build",
+    "start": "next start",
+    "postinstall": "prisma generate"
+  },
   "dependencies": {
     "@prisma/client": "5.16.1",
     "next": "14.2.4",
