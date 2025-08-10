@@ -31,7 +31,10 @@ export async function getCurrentGameweek(seasonId: string) {
 // We derive first kickoff from fixtures for the gw.
 export async function isLockedForGW(seasonId: string, gameweekId: string) {
   const first = await db.fixture.findFirst({
-    where: { seasonId, gameweekId },
+    where: {
+      gameweekId,                 // direct field on Fixture
+      gameweek: { seasonId },     // relate through Gameweek → Season
+    },
     orderBy: { kickoff: 'asc' },
     select: { kickoff: true },
   });
