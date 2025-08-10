@@ -21,7 +21,5 @@
     "prisma": "5.16.1",
     "typescript": "5.4.5"
   },
-  "engines": {
-    "node": ">=18 <23"
-  }
+  "engines": { "node": ">=18 <23" }
 }
