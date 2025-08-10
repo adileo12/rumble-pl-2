@@ -12,6 +12,7 @@ datasource db {
 model User {
   id           String        @id @default(uuid())
   displayName  String
+  secretCode   String        @unique
   joinCode     String        @unique
   isAdmin      Boolean       @default(false)
   createdAt    DateTime      @default(now())
