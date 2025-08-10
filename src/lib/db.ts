@@ -1,33 +1,27 @@
-export const runtime = 'nodejs';
-
+// src/lib/db.ts  (or the file you found that creates PrismaClient)
 import { PrismaClient } from '@prisma/client';
 
-// Prefer DATABASE_URL, but fall back to Vercel Postgres names
+// Prefer DATABASE_URL, but also work with Vercel Postgres defaults
 const datasourceUrl =
-  process.env.DATABASE_URL ||
-  process.env.POSTGRES_PRISMA_URL ||  // prisma+postgres://accelerate.prisma…
-  process.env.POSTGRES_URL ||         // direct postgres:// (pooled)
-  process.env.POSTGRES_URL_NON_POOLING || // direct non-pooled
+  process.env.DATABASE_URL ??
+  process.env.POSTGRES_PRISMA_URL ??      // Vercel pooled (prisma+postgres://…)
+  process.env.POSTGRES_URL ??             // Vercel pooled (postgres://…:6543)
+  process.env.POSTGRES_URL_NON_POOLING ?? // Vercel non-pooled (postgres://…:5432)
   '';
 
-if (!datasourceUrl) {
-  // Helpful error if something is misconfigured
-  // (You can remove this once you're stable)
-  console.warn('No DATABASE_URL/POSTGRES_* env vars found');
-}
-
 declare global {
+  // Allow re-use in dev to avoid "already 10 Prisma Clients are actively running" error
   // eslint-disable-next-line no-var
-  var __db__: PrismaClient | undefined;
+  var __prisma__: PrismaClient | undefined;
 }
 
 export const db =
-  global.__db__ ??
+  global.__prisma__ ??
   new PrismaClient({
-    // Works with normal postgres:// or prisma+postgres://
-    datasourceUrl,
+    datasources: { db: { url: datasourceUrl } },
+    log: process.env.NODE_ENV === 'production' ? ['error'] : ['warn', 'error'],
   });
 
 if (process.env.NODE_ENV !== 'production') {
-  global.__db__ = db;
+  global.__prisma__ = db;
 }
