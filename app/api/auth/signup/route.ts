@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/src/lib/db";
-import { generateSecretCode } from '@/lib/secret';
+import { generateSecretCode } from "@/src/lib/secret";
 
 // Adjust these types/fields to your actual Prisma User model.
 // This code assumes you have at least: id, displayName (or name), secretCode (preferably @unique), isAdmin (default false)
