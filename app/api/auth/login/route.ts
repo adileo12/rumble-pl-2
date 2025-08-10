@@ -10,7 +10,7 @@ export async function POST(req: Request) {
   }
 
   // find or create user on secretCode
-  let user = await db.user.findUnique({ where: { secretCode } }).catch(() => null);
+  let user = await db.user.findFirst({ where: { secretCode } }).catch(() => null);
   if (!user) {
     if (!name) return NextResponse.json({ ok: false, error: 'name required for first login' }, { status: 400 });
     user = await db.user.create({ data: { name, secretCode } });
