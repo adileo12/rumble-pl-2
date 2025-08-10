@@ -16,6 +16,7 @@ model User {
   secretCode   String        @unique
   joinCode     String        @unique
   isAdmin      Boolean       @default(false)
+  alive        Boolean       @default(true) 
   createdAt    DateTime      @default(now())
   picks        Pick[]
   statuses     UserStatus[]
