@@ -31,13 +31,13 @@ export async function getCurrentGameweek(seasonId: string) {
 // We derive first kickoff from fixtures for the gw.
 export async function isLockedForGW(seasonId: string, gameweekId: string) {
   const first = await db.fixture.findFirst({
-    where: { seasonId, gameweekId, kickoff: { not: null } },
+    where: { seasonId, gameweekId },
     orderBy: { kickoff: 'asc' },
-    select: { kickoff: true }
+    select: { kickoff: true },
   });
-  if (!first?.kickoff) return false;
-  const lockAt = new Date(new Date(first.kickoff).getTime() - 30 * 60 * 1000);
-  return new Date() >= lockAt;
+
+  if (!first?.kickoff) return false; // no fixtures -> not locked
+  return new Date() >= first.kickoff;
 }
 
 export async function clubsYouAlreadyPicked(userId: string, seasonId: string) {
