@@ -1,26 +1,30 @@
 import { db } from "@/src/lib/db";
 
-const animals = [
-  "Lion","Tiger","Cheetah","Panther","Leopard","Jaguar","Wolf","Fox","Bear","Eagle",
-  "Falcon","Hawk","Shark","Dolphin","Whale","Rhino","Hippo","Gorilla","Puma","Lynx",
-  "Bison","Otter","Badger","Moose","Raven","Cobra","Viper","Cougar","Owl","Bat",
-  "Camel","Giraffe","Elephant","Zebra","Kangaroo","Koala","Panda","Sloth","Armadillo",
-  "Porcupine","Hedgehog","Wolverine","Alligator","Crocodile","Monitor","Gecko",
-  "Chameleon","Toad","Frog","Salamander","Newt","Parrot","Macaw","Canary","Finch",
-  "Sparrow","Peacock","Penguin","Seagull","Heron","Crane","Flamingo","Stork","Puffin",
-  "Seal","Walrus","SeaLion","Manatee","Orca","Swordfish","Marlin","Barracuda",
-  "Piranha","Goldfish","Carp","Salmon","Trout","Catfish","Stingray","Octopus",
-  "Squid","Lobster","Crab","Shrimp","Starfish","Jellyfish","Coral","Butterfly",
-  "Bee","Wasp","Hornet","Dragonfly","Grasshopper","Cricket","Ant","Termite","Scorpion",
-  "Tarantula","Spider","Moth","Firefly","Beetle","Ladybug"
+const ANIMALS = [
+  "Aardvark","Albatross","Alligator","Alpaca","Ant","Anteater","Antelope","Armadillo","Baboon","Badger",
+  "Barracuda","Bat","Bear","Beaver","Bison","Boar","Buffalo","Butterfly","Camel","Caribou",
+  "Cat","Caterpillar","Cheetah","Chicken","Chimpanzee","Chinchilla","Cobra","Cougar","Coyote","Crab",
+  "Crane","Crocodile","Crow","Deer","Dingo","Dinosaur","Dog","Dolphin","Donkey","Dove",
+  "Dragonfly","Duck","Eagle","Echidna","Eel","Elephant","Elk","Emu","Falcon","Ferret",
+  "Finch","Fish","Flamingo","Fox","Frog","Gazelle","Gecko","Giraffe","Goat","Goldfinch",
+  "Goose","Gopher","Gorilla","Grasshopper","Grouse","Hamster","Hare","Hawk","Hedgehog","Heron",
+  "Hippopotamus","Hornet","Horse","Hummingbird","Hyena","Ibis","Iguana","Impala","Jaguar","Jay",
+  "Jellyfish","Kangaroo","Kingfisher","Kiwi","Koala","Komodo","Lark","Leopard","Lemming","Lemur",
+  "Lion","Lizard","Llama","Lobster","Lynx","Macaw","Magpie","Mallard","Manatee","Mandrill",
+  "Mantis","Meerkat","Mink","Mole","Moose","Mouse","Mule","Narwhal","Newt","Nightingale",
+  "Octopus","Opossum","Orangutan","Orca","Osprey","Ostrich","Otter","Owl","Ox","Panda",
+  "Panther","Parrot","Peacock","Pelican","Penguin","Pheasant","Pig","Pigeon","Pika","Piranha",
+  "Platypus","PolarBear","Porcupine","Porpoise","Possum","PrairieDog","Puffin","Puma","Quail","Quokka",
+  "Rabbit","Raccoon","Ram","Raven","RedPanda","Reindeer","Rhinoceros","Rooster","Salamander","Salmon",
+  "Sandpiper","Scorpion","Seahorse","Seal","Shark","Sheep","Skunk","Sloth","Snail","Snake",
+  "Sparrow","Spider","Squid","Squirrel","Stallion","Starling","Stingray","Stork","Swan","Tapir",
+  "Termite","Tiger","Toad","Toucan","Trout","Turkey","Turtle","Viper","Vulture","Wallaby",
+  "Walrus","Wasp","Weasel","Whale","Wildcat","Wildebeest","Wolf","Wolverine","Wombat","Woodpecker",
+  "Yak","Zebra"
 ];
 
-function randomInt(min: number, max: number) {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
 export function generateSecretCode() {
-  const animal = animals[randomInt(0, animals.length - 1)];
-  const num = String(randomInt(0, 99)).padStart(2, '0'); // ensures two digits
+  const animal = ANIMALS[Math.floor(Math.random() * ANIMALS.length)];
+  const num = Math.floor(Math.random() * 90) + 10; // 10–99
   return `${animal}${num}`;
 }
