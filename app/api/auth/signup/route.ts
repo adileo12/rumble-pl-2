@@ -16,13 +16,14 @@ export async function POST(req: Request) {
   const secretCode = await generateSecretCode();
 
   const user = await db.user.create({
-    data: {
-      name: fullName,       // use `name` since your DB doesn't have displayName
-      secretCode,
-      joinCode: "PUBLIC",   // keep/remove depending on your schema
-    },
-    select: { id: true, name: true, secretCode: true }, // <-- inside the same object
-  });
+  data: {
+    name: fullName,         // keep if you also store `name`
+    displayName: fullName,  // <-- add this line
+    secretCode,
+    joinCode: "PUBLIC",
+  },
+  select: { id: true, name: true, displayName: true, secretCode: true },
+});
 
   return NextResponse.json({ ok: true, user });
 }
