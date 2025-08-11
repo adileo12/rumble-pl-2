@@ -10,7 +10,7 @@ export async function POST(req: Request) {
     }
 
     const fullName = `${firstName} ${lastName}`.trim();
-    const secretCode = await generateUniqueSecret();
+    const secretCode = await generateUniqueSecret(db);
 
     const user = await db.user.create({
       data: {
