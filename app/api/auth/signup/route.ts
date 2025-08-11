@@ -13,16 +13,18 @@ export async function POST(req: Request) {
 
     const displayName = `${firstName} ${lastName}`.trim();
     const secretCode = await generateSecretCode();
+    const fullName = `${firstName} ${lastName}`.trim();
 
     // If your User model has different required fields (e.g., joinCode),
     // add them here with a sensible default.
     const user = await db.user.create({
-      data: {
-        displayName,          // or `name` if that’s your column
-        secretCode,           // make this @unique in schema if possible
-        joinCode: "PUBLIC", // <-- uncomment if your schema requires it
-      },
-      select: { id: true, displayName: true, secretCode: true }
+  data: {
+    name: fullName,        // ← use `name` instead of `displayName`
+    secretCode,            // keep this
+    joinCode: "PUBLIC",    // include if your schema requires it
+  },
+});
+      select: { id: true, name: true, secretCode: true }
     });
 
     // (Optional) set a simple session cookie so they’re “logged in” right away
