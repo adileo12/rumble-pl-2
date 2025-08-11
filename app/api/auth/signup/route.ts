@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/src/lib/db";
-import { generateUniqueSecret } from "@/src/lib/secret"; // <- make sure this path matches your file
+import { generateSecretCode } from "@/src/lib/secret"; // <- make sure this path matches your file
 
 export async function POST(req: Request) {
   const { firstName, lastName } = await req.json();
@@ -13,7 +13,7 @@ export async function POST(req: Request) {
   }
 
   const fullName = `${firstName} ${lastName}`.trim();
-  const secretCode = await generateUniqueSecret();
+  const secretCode = await generateSecretCode();
 
   const user = await db.user.create({
     data: {
