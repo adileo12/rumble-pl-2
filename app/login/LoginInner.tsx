@@ -11,7 +11,7 @@ export default function LoginInner() {
 
   const router = useRouter();
   const sp = useSearchParams();
-  const next = sp.get("next") || "/";
+  const next = sp.get("next") || "/home";
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
