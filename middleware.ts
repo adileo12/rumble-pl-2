@@ -1,17 +1,37 @@
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
-const PROTECTED = ['/play', '/leaderboard', '/admin'];
+const PUBLIC_PATHS = new Set([
+  "/login",
+  "/signup",
+  "/admin-login",
+  "/api/auth/login",
+  "/api/auth/logout",
+  "/api/auth/signup",
+  "/api/auth/admin-login",
+  "/_next", // next assets
+  "/favicon.ico",
+]);
 
-export function middleware(req: NextRequest) {
+export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  if (PROTECTED.some(p => pathname.startsWith(p))) {
-    const cookie = req.cookies.get('rumble_session')?.value;
-    if (!cookie) {
-      const url = req.nextUrl.clone();
-      url.pathname = '/login';
-      return NextResponse.redirect(url);
-    }
+
+  // allow all public paths and static assets
+  if ([...PUBLIC_PATHS].some(p => pathname.startsWith(p))) return NextResponse.next();
+  if (pathname.startsWith("/api")) return NextResponse.next();
+
+  // require session for everything else
+  const token = req.cookies.get("session")?.value;
+  if (!token) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/login";
+    url.searchParams.set("next", pathname);
+    return NextResponse.redirect(url);
   }
+
   return NextResponse.next();
 }
+
+export const config = {
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+};
