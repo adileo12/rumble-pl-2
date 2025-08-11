@@ -10,24 +10,40 @@ export default function SignupPage() {
   const [error, setError] = useState<string | null>(null);
 
   async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setLoading(true);
+  e.preventDefault();
+  setError(null);
+  setLoading(true);
+  setSecret(null);
+
+  try {
+    const res = await fetch("/api/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ firstName, lastName }),
+    });
+
+    // Try to parse JSON, but don't crash if body is empty/non-JSON
+    let data: any = null;
     try {
-      const res = await fetch("/api/auth/signup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ firstName, lastName })
-      });
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error || "Signup failed");
-      setSecret(data.user.secretCode);
-    } catch (err: any) {
-      setError(err.message || "Something went wrong");
-    } finally {
-      setLoading(false);
+      data = await res.json();
+    } catch {
+      // ignore; we'll build a fallback error below
     }
+
+    if (!res.ok || !data?.ok) {
+      const msg =
+        data?.error ||
+        `Signup failed (${res.status}${res.statusText ? ` ${res.statusText}` : ""})`;
+      throw new Error(msg);
+    }
+
+    setSecret(data.user.secretCode);
+  } catch (err: any) {
+    setError(err?.message || "Something went wrong");
+  } finally {
+    setLoading(false);
   }
+}
 
   function copy() {
     if (!secret) return;
