@@ -1,68 +1,71 @@
+// app/login/LoginInner.tsx
 'use client';
 
 import { useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 export default function LoginInner() {
-  const search = useSearchParams();            // safe here (inside Suspense)
-  const signupSuccess = search.get('new') === '1';
-
-  const [secret, setSecret] = useState('');
+  const [secretCode, setSecret] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError]   = useState<string|null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const router = useRouter();
+  const sp = useSearchParams();
+  const next = sp.get('next') || '/home';
 
-  async function onSubmit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
-    setError(null);
+    setErr(null);
     setLoading(true);
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ secretCode: secret }),
+        body: JSON.stringify({ secretCode }),
       });
       const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || 'Login failed');
-      // redirect after login
-      window.location.href = '/'; // home (protected area)
-    } catch (err: any) {
-      setError(err.message || 'Something went wrong');
+      if (!data.ok) throw new Error(data.error || 'Login failed');
+      router.replace(next);
+    } catch (e: any) {
+      setErr(e.message || 'Login failed');
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <main className="mx-auto max-w-md p-6">
-      <h1 className="text-2xl font-semibold mb-4">Log in</h1>
-      {signupSuccess && (
-        <p className="mb-3 text-sm text-green-700">
-          Secret created! Enter it below to log in.
-        </p>
-      )}
-      <form onSubmit={onSubmit} className="space-y-4">
+    <main className="mx-auto max-w-sm p-6">
+      <h1 className="text-2xl font-semibold mb-4">Login</h1>
+      <form onSubmit={submit} className="space-y-4">
         <div>
           <label className="block text-sm mb-1">Secret code</label>
           <input
             className="w-full rounded border px-3 py-2"
-            value={secret}
+            value={secretCode}
             onChange={(e) => setSecret(e.target.value)}
             required
           />
         </div>
-        {error && <p className="text-red-600 text-sm">{error}</p>}
+        {err && <p className="text-red-600 text-sm">{err}</p>}
         <button
-          type="submit"
           disabled={loading}
           className="rounded bg-black text-white px-4 py-2 disabled:opacity-60"
         >
-          {loading ? 'Signing in…' : 'Sign in'}
+          {loading ? 'Signing in...' : 'Sign in'}
         </button>
       </form>
 
       <div className="mt-4 text-sm">
-        <a href="/signup" className="underline">Create a secret code</a>
-        <a href="/admin/login" className="underline float-right">Admin login</a>
+        New here?{' '}
+        <Link href="/signup" className="underline">
+          Create your secret code
+        </Link>
+      </div>
+
+      <div className="mt-10 text-xs text-right">
+        <Link href="/admin-login" className="underline opacity-70 hover:opacity-100">
+          Admin login
+        </Link>
       </div>
     </main>
   );
