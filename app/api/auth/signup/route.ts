@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/src/lib/db";
-import { generateUniqueSecret } from "@/src/lib/secrets"; // <- make sure this path matches your file
+import { generateUniqueSecret } from "@/src/lib/secret"; // <- make sure this path matches your file
 
 export async function POST(req: Request) {
   const { firstName, lastName } = await req.json();
