@@ -14,15 +14,14 @@ export async function POST(req: Request) {
     const fullName = `${firstName} ${lastName}`.trim();
     const secretCode = await generateUniqueSecret(db); // <-- pass db
 
-    const user = await db.user.create({
-      data: {
-        displayName: fullName, // <-- required (maps to DB column "name")
-        secretCode,            // <-- @unique in your schema
-        // joinCode: "PUBLIC",  // optional because you set a default
-      },
-      select: { id: true, secretCode: true },
-    });
-
+    await db.user.create({
+  data: {
+    displayName: fullName,  // ← use displayName here
+    secretCode,
+    // joinCode: "PUBLIC", // only if required by your schema
+  },
+  select: { id: true, displayName: true, secretCode: true }
+});
     return NextResponse.json({ ok: true, user }, { status: 200 });
   } catch (err: any) {
     console.error("SIGNUP ERROR:", err);
