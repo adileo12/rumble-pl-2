@@ -25,7 +25,7 @@ export async function POST(req: Request) {
       data: {
         displayName: fullName,       // your Prisma model maps to column "name"
         secretCode,                  // ← make sure this is present
-        joinCode: "PUBLIC",          // safe default; exists in your schema
+       // joinCode: "PUBLIC",          // safe default; exists in your schema
       },
       select: { id: true, displayName: true, secretCode: true },
     });
