@@ -12,7 +12,7 @@ datasource db {
 model User {
   id           String        @id @default(uuid())
   displayName  String
-  name         String? 
+  name         String 
   secretCode   String        @unique
   joinCode    String  @default("PUBLIC")
   isAdmin      Boolean       @default(false)
