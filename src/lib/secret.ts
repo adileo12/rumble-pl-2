@@ -1,4 +1,5 @@
 import { db } from "@/src/lib/db";
+import type { PrismaClient } from "@prisma/client";
 
 const ANIMALS = [
   "Aardvark","Albatross","Alligator","Alpaca","Ant","Anteater","Antelope","Armadillo","Baboon","Badger",
@@ -23,8 +24,19 @@ const ANIMALS = [
   "Yak","Zebra"
 ];
 
-export function generateSecretCode() {
+export function generateSecretCode(): string {
   const animal = ANIMALS[Math.floor(Math.random() * ANIMALS.length)];
-  const num = Math.floor(Math.random() * 90) + 10; // 10–99
+  const num = Math.floor(Math.random() * 100).toString().padStart(2, "0");
   return `${animal}${num}`;
+}
+
+
+export async function generateUniqueSecret(db: PrismaClient): Promise<string> {
+  // try until unique
+  for (let i = 0; i < 50; i++) {
+    const code = generateSecretCode();
+    const exists = await db.user.count({ where: { secretCode: code } });
+    if (exists === 0) return code;
+  }
+  throw new Error("Could not generate unique secret code");
 }
