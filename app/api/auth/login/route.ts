@@ -11,7 +11,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: "Missing secret code" }, { status: 400 });
     }
    const user = await db.user.findUnique({
-      where: { secretcode: secretCode }, // field is @map("secretcode")
+      where: { secretCode: secretCode }, // field is @map("secretcode")
       select: { id: true, displayName: true, isAdmin: true }
     });
     if (!user) {
