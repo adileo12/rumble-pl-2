@@ -14,7 +14,7 @@ model User {
   displayName  String
   name         String? 
   secretCode   String        @unique
-  joinCode     String        @unique
+  joinCode    String  @default("PUBLIC")
   isAdmin      Boolean       @default(false)
   alive        Boolean       @default(true) 
   createdAt    DateTime      @default(now())
