@@ -5,7 +5,7 @@ import { db } from "@/src/lib/db";
 export async function POST(req: Request) {
   try {
     const { secretCode = "" } = await req.json();
-    const code = String(secretCode).trim();
+    const code = String(secretCode || "").trim();
     if (!code) {
       return NextResponse.json({ ok: false, error: "Missing secretCode" }, { status: 400 });
     }
@@ -14,16 +14,16 @@ export async function POST(req: Request) {
       where: { secretCode: code },
       select: { id: true, displayName: true, isAdmin: true },
     });
-
     if (!user) {
       return NextResponse.json({ ok: false, error: "Invalid secret code" }, { status: 401 });
     }
 
+    const secure = process.env.NODE_ENV === "production";
     const res = NextResponse.json({ ok: true, user }, { status: 200 });
     res.cookies.set("sid", user.id, {
       httpOnly: true,
       sameSite: "lax",
-      secure: true,
+      secure,           // important for localhost
       path: "/",
       maxAge: 60 * 60 * 24 * 30,
     });
