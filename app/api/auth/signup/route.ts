@@ -1,35 +1,36 @@
 import { NextResponse } from "next/server";
 import { db } from "@/src/lib/db";
-import { generateUniqueSecret } from "@/src/lib/secret";
+import { generateUniqueSecret } from "@/src/lib/secrets"; // ← file name: secrets.ts
 
-// POST /api/auth/signup  { firstName, lastName }
 export async function POST(req: Request) {
   try {
     const { firstName, lastName } = await req.json();
-
     if (!firstName || !lastName) {
       return NextResponse.json(
-        { ok: false, error: "First name and last name are required" },
+        { ok: false, error: "First and last name are required" },
         { status: 400 }
       );
     }
 
     const fullName = `${firstName} ${lastName}`.trim();
 
-    // make a unique animal+NN code (checks DB for collisions)
-    const secretCode = await generateUniqueSecret(db);
+    const secretCode = await generateUniqueSecret();
+    if (!secretCode) {
+      throw new Error("Secret code generation returned empty");
+    }
+    // Debug (visible in Vercel logs)
+    console.log("Generated secret:", secretCode);
 
-    // create the user
-    const user = await db.user.create({
+    const created = await db.user.create({
       data: {
-        displayName: fullName,   // Prisma field (mapped to DB column "name")
-        secretCode,              // requires the column in DB
-        // joinCode: "PUBLIC",    // uncomment ONLY if your DB has this column
+        displayName: fullName,       // your Prisma model maps to column "name"
+        secretCode,                  // ← make sure this is present
+        joinCode: "PUBLIC",          // safe default; exists in your schema
       },
       select: { id: true, displayName: true, secretCode: true },
     });
 
-    return NextResponse.json({ ok: true, user }, { status: 200 });
+    return NextResponse.json({ ok: true, user: created }, { status: 200 });
   } catch (err: any) {
     console.error("SIGNUP ERROR:", err);
     return NextResponse.json(
