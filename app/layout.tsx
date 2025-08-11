@@ -3,9 +3,10 @@ import { cookies } from "next/headers";
 import { db } from "@/src/lib/db";
 import Link from "next/link";
 
-export default async function SiteLayout({ children }: { children: React.ReactNode }) {
-  const token = (await cookies()).get("session")?.value;
-  let user: { displayName: string; isAdmin: boolean } | null = null;
+// app/(protected)/layout.tsx
+export default function ProtectedLayout({ children }: { children: React.ReactNode }) {
+  return <div>{/* Navbar/Tabs here */}{children}</div>;
+}
 
   if (token) {
     const session = await db.session.findUnique({
