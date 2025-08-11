@@ -13,7 +13,7 @@ export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // allow all public paths and static assets
-  if (PUBLIC.some(p => pathname === p|| pathname.startWith("api"))) {
+  if (PUBLIC.some(p => pathname === p|| pathname.startsWith("api"))) {
   return NextResponse.next();
   }
 
