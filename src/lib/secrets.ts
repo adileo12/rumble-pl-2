@@ -37,7 +37,10 @@ export function generateSecretCode(): string {
 export async function generateUniqueSecret(): Promise<string> {
   for (let i = 0; i < 20; i++) {
     const code = generateSecretCode();
-    const exists = await db.user.findUnique({ where: { secretCode: code } });
+    const exists = await db.user.findUnique({
+      where: { secretCode: code },
+      select: { id: true },
+    });
     if (!exists) return code;
   }
   throw new Error("Could not generate a unique secret code");
