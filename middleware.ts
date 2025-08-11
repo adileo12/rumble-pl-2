@@ -1,35 +1,38 @@
+// middleware.ts (at repo root)
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const PUBLIC = [
-  "/",
+const PUBLIC_PATHS = [
   "/login",
   "/signup",
-  "/admin-login",
-  "/api"
+  "/api/auth/login",
+  "/api/auth/signup",
+  "/favicon.ico",
+  "/_next",     // Next.js internals
+  "/assets",    // static assets if you have them
 ];
 
-export async function middleware(req: NextRequest) {
+export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // allow all public paths and static assets
-  if (PUBLIC.some(p => pathname === p|| pathname.startsWith("api"))) {
-  return NextResponse.next();
+  // Allow all public paths
+  if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
+    return NextResponse.next();
   }
 
-  // check for your session cookie, e.g
-   const session = req.cookies.get("session")?.value;
+  // Check session cookie for all other paths
+  const session = req.cookies.get("session")?.value; // <-- use your real cookie name
   if (!session) {
     const url = req.nextUrl.clone();
     url.pathname = "/login";
+    url.searchParams.set("from", pathname);
     return NextResponse.redirect(url);
   }
 
   return NextResponse.next();
 }
 
-// limit to paths you actually want to guard (optional):
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  // Protect everything except files and Next internals
+  matcher: ["/((?!_next|.*\\..*).*)"],
 };
-
