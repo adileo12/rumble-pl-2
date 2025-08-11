@@ -24,19 +24,21 @@ const ANIMALS = [
   "Yak","Zebra"
 ];
 
-export function generateSecretCode(): string {
-  const animal = ANIMALS[Math.floor(Math.random() * ANIMALS.length)];
-  const num = Math.floor(Math.random() * 100).toString().padStart(2, "0");
+function rand(n: number) {
+  return Math.floor(Math.random() * n);
+}
+
+export function generateSecretCode() {
+  const animal = ANIMALS[rand(ANIMALS.length)];
+  const num = String(rand(90) + 10); // 10..99
   return `${animal}${num}`;
 }
 
-
-export async function generateUniqueSecret(db: PrismaClient): Promise<string> {
-  // try until unique
-  for (let i = 0; i < 50; i++) {
+export async function generateUniqueSecret(db: PrismaClient) {
+  for (let i = 0; i < 8; i++) {
     const code = generateSecretCode();
-    const exists = await db.user.count({ where: { secretCode: code } });
-    if (exists === 0) return code;
+    const exists = await db.user.findUnique({ where: { secretCode: code } });
+    if (!exists) return code;
   }
-  throw new Error("Could not generate unique secret code");
+  throw new Error("Could not generate a unique secret code. Try again.");
 }
