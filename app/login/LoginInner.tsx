@@ -17,29 +17,43 @@ export default function LoginInner() {
     e.preventDefault();
     setErr(null);
     setLoading(true);
+
+    console.log("🔹 Starting login process...");
+    console.log("Secret code entered:", secretCode);
+    console.log("Redirect target:", next);
+
     try {
+      console.log("➡ Sending POST request to /api/auth/login");
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ secretCode }),
       });
 
+      console.log("⬅ Response status:", res.status);
+
       let data: any = null;
       try {
         data = await res.json();
-      } catch {
+        console.log("📦 Parsed JSON response:", data);
+      } catch (jsonErr) {
+        console.error("❌ Failed to parse JSON:", jsonErr);
         throw new Error(`Non-JSON response (status ${res.status})`);
       }
 
       if (!res.ok || !data?.ok) {
+        console.warn("⚠ Login failed:", data?.error);
         throw new Error(data?.error || `Login failed (status ${res.status})`);
       }
 
+      console.log("✅ Login successful. Redirecting to:", next);
       router.replace(next);
     } catch (e: any) {
+      console.error("💥 Login error:", e);
       setErr(e.message || "Login failed");
     } finally {
       setLoading(false);
+      console.log("🔹 Login process finished");
     }
   }
 
