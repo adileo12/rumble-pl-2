@@ -12,7 +12,7 @@ export async function POST(req: Request) {
     }
 
     const displayName = `${firstName} ${lastName}`.trim();
-    const secretCode = await generateUniqueSecret();
+    const secretCode = await generateSecretCode();
 
     // If your User model has different required fields (e.g., joinCode),
     // add them here with a sensible default.
