@@ -1,32 +1,23 @@
 import { NextResponse } from "next/server";
 import { db } from "@/src/lib/db";
-import { generateUniqueSecret } from "@/src/lib/secrets"; // ← file name: secrets.ts
+import { generateUniqueSecret } from "@/src/lib/secrets";
 
 export async function POST(req: Request) {
   try {
     const { firstName, lastName } = await req.json();
-    if (!firstName || !lastName) {
-      return NextResponse.json(
-        { ok: false, error: "First and last name are required" },
-        { status: 400 }
-      );
+    const fullName = `${firstName ?? ""} ${lastName ?? ""}`.trim();
+    if (!fullName) {
+      return NextResponse.json({ ok: false, error: "Name required" }, { status: 400 });
     }
-
-    const fullName = `${firstName} ${lastName}`.trim();
 
     const secretCode = await generateUniqueSecret();
     if (!secretCode) {
+      // extra safety – never call create() with a falsy code
       throw new Error("Secret code generation returned empty");
     }
-    // Debug (visible in Vercel logs)
-    console.log("Generated secret:", secretCode);
 
     const created = await db.user.create({
-      data: {
-        displayName: fullName,       // your Prisma model maps to column "name"
-        secretCode,                  // ← make sure this is present
-       // joinCode: "PUBLIC",          // safe default; exists in your schema
-      },
+      data: { displayName: fullName, secretCode },     // `displayName` is @map("name")
       select: { id: true, displayName: true, secretCode: true },
     });
 
