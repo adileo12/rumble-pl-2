@@ -20,7 +20,7 @@ export async function POST(req: Request) {
       data: {
         displayName,          // or `name` if that’s your column
         secretCode,           // make this @unique in schema if possible
-        // joinCode: "PUBLIC", // <-- uncomment if your schema requires it
+        joinCode: "PUBLIC", // <-- uncomment if your schema requires it
       },
       select: { id: true, displayName: true, secretCode: true }
     });
