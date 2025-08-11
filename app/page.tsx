@@ -1,8 +1,10 @@
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
+export default LoginPage;
 
 import { db } from '@/src/lib/db';
 import { formatIst } from '@/src/lib/time';
+import LoginPage from "./login/page";
 
 
 export default async function Page() {
