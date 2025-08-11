@@ -12,14 +12,14 @@ export async function POST(req: Request) {
     const fullName = `${firstName} ${lastName}`.trim();
     const secretCode = await generateUniqueSecret(db);
 
-    const user = await db.user.create({
-      data: {
-        name: fullName,     // or displayName if that’s your column
-        secretCode,
-        // joinCode: "PUBLIC", // include only if your schema requires it
-      },
-      select: { id: true, name: true, secretCode: true },
-    });
+   const user = await db.user.create({
+  data: {
+    displayName: fullName, // writes into DB column `name`
+    secretCode,
+    // joinCode: "PUBLIC", // include only if your schema requires it
+  },
+  select: { id: true, displayName: true, secretCode: true },
+});
 
     return NextResponse.json({ ok: true, user });
   } catch (err) {
