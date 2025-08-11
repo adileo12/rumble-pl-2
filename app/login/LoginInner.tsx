@@ -1,33 +1,43 @@
-// app/login/LoginInner.tsx
-'use client';
+"use client";
 
-import { useState } from 'react';
-import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useState } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 
 export default function LoginInner() {
-  const [secretCode, setSecret] = useState('');
+  const [secretCode, setSecret] = useState("");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
   const router = useRouter();
   const sp = useSearchParams();
-  const next = sp.get('next') || '/home';
+  const next = sp.get("next") || "/";
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setErr(null);
     setLoading(true);
     try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ secretCode }),
       });
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error || 'Login failed');
+
+      let data: any = null;
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error(`Non-JSON response (status ${res.status})`);
+      }
+
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || `Login failed (status ${res.status})`);
+      }
+
       router.replace(next);
     } catch (e: any) {
-      setErr(e.message || 'Login failed');
+      setErr(e.message || "Login failed");
     } finally {
       setLoading(false);
     }
@@ -36,6 +46,7 @@ export default function LoginInner() {
   return (
     <main className="mx-auto max-w-sm p-6">
       <h1 className="text-2xl font-semibold mb-4">Login</h1>
+
       <form onSubmit={submit} className="space-y-4">
         <div>
           <label className="block text-sm mb-1">Secret code</label>
@@ -43,20 +54,23 @@ export default function LoginInner() {
             className="w-full rounded border px-3 py-2"
             value={secretCode}
             onChange={(e) => setSecret(e.target.value)}
+            autoComplete="off"
             required
           />
         </div>
+
         {err && <p className="text-red-600 text-sm">{err}</p>}
+
         <button
           disabled={loading}
           className="rounded bg-black text-white px-4 py-2 disabled:opacity-60"
         >
-          {loading ? 'Signing in...' : 'Sign in'}
+          {loading ? "Signing in..." : "Sign in"}
         </button>
       </form>
 
       <div className="mt-4 text-sm">
-        New here?{' '}
+        New here?{" "}
         <Link href="/signup" className="underline">
           Create your secret code
         </Link>
