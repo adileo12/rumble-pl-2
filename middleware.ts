@@ -1,37 +1,35 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const PUBLIC_PATHS = new Set([
+const PUBLIC = [
+  "/",
   "/login",
   "/signup",
   "/admin-login",
-  "/api/auth/login",
-  "/api/auth/logout",
-  "/api/auth/signup",
-  "/api/auth/admin-login",
-  "/_next", // next assets
-  "/favicon.ico",
-]);
+  "/api"
+];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // allow all public paths and static assets
-  if ([...PUBLIC_PATHS].some(p => pathname.startsWith(p))) return NextResponse.next();
-  if (pathname.startsWith("/api")) return NextResponse.next();
+  if (PUBLIC.some(p => pathname === p|| pathname.startWith("api"))) {
+  return NextResponse.next();
+  }
 
-  // require session for everything else
-  const token = req.cookies.get("session")?.value;
-  if (!token) {
+  // check for your session cookie, e.g
+   const session = req.cookies.get("session")?.value;
+  if (!session) {
     const url = req.nextUrl.clone();
     url.pathname = "/login";
-    url.searchParams.set("next", pathname);
     return NextResponse.redirect(url);
   }
 
   return NextResponse.next();
 }
 
+// limit to paths you actually want to guard (optional):
 export const config = {
   matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };
+
