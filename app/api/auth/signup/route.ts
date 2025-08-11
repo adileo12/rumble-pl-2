@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/src/lib/db";
-import { generateUniqueSecret } from "@/src/lib/secrets"; // ← file name: secrets.ts
+import { generateUniqueSecret } from "@/src/lib/secret"; // ← file name: secrets.ts
 
 export async function POST(req: Request) {
   try {
