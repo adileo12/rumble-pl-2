@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -10,8 +10,7 @@ export default function LoginInner() {
   const [err, setErr] = useState<string | null>(null);
   const router = useRouter();
   const sp = useSearchParams();
-
-  const next = sp.get("next") || sp.get("from") || "/home";
+  const next = sp.get("next") || "/home";
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -27,51 +26,48 @@ export default function LoginInner() {
       if (!res.ok || !data?.ok) throw new Error(data?.error || "Login failed");
       window.location.assign(next);
     } catch (e: any) {
-      setErr(e.message || "Login failed");
+      setErr(e?.message || "Login failed");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-white">
-      <div className="w-full max-w-xs text-center">
-        {/* Header */}
-        <h1 className="text-4xl font-extrabold mb-8">HAVEN GAMES</h1>
+    <div className="min-h-[70vh] flex items-center justify-center px-6">
+      <form
+        onSubmit={submit}
+        className="w-full max-w-sm space-y-4 text-center"
+      >
+        <label className="block text-base mb-1">Secret code</label>
+        <input
+          className="w-full rounded border px-4 py-3 text-lg"
+          value={secretCode}
+          onChange={(e) => setSecret(e.target.value)}
+          autoComplete="off"
+          required
+        />
 
-        {/* Form */}
-        <form onSubmit={submit} className="flex flex-col items-center">
-          <input
-            type="text"
-            placeholder="Secret code"
-            value={secretCode}
-            onChange={(e) => setSecret(e.target.value)}
-            className="border rounded-md px-4 py-3 text-lg mb-4 w-full text-center"
-            required
-          />
+        {err && <p className="text-red-600 text-sm">{err}</p>}
 
-          {err && <p className="text-red-600 text-sm mb-2">{err}</p>}
+        <button
+          disabled={loading}
+          className="w-full rounded bg-black text-white px-5 py-3 text-base disabled:opacity-60"
+        >
+          {loading ? "Signing in..." : "Sign in"}
+        </button>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="bg-blue-600 hover:bg-blue-700 text-white py-3 px-6 rounded-md text-lg mb-2 w-full"
-          >
-            {loading ? "Signing in…" : "Sign in"}
-          </button>
+        {/* Smaller, just below the button */}
+        <p className="text-sm">
+          New here?{" "}
+          <Link href="/signup" className="underline">
+            Create your secret code
+          </Link>
+        </p>
+      </form>
 
-          <p className="text-xs">
-            New here?{" "}
-            <Link href="/signup" className="underline">
-              Create your secret code
-            </Link>
-          </p>
-        </form>
-      </div>
-
-      {/* Admin link bottom-right */}
-      <div className="fixed right-4 bottom-4 text-xs opacity-70 hover:opacity-100">
-        <Link href="/admin-login" className="underline">
+      {/* Bottom-right admin login */}
+      <div className="fixed right-4 bottom-4 text-xs">
+        <Link href="/admin-login" className="underline opacity-80 hover:opacity-100">
           Admin login
         </Link>
       </div>
