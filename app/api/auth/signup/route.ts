@@ -18,7 +18,7 @@ export async function POST(req: Request) {
     // 1) block duplicate sign‑ups by name (case-insensitive match)
     const existing = await db.user.findFirst({
       where: { displayName: { equals: fullName, mode: "insensitive" } },
-      select: { id: true, name: true }
+      select: { id: true, displayName: true }
     });
     if (existing) {
       return NextResponse.json(
