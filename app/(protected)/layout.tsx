@@ -21,7 +21,7 @@ export default async function ProtectedLayout({
 
   return (
     <>
-      <Nav user={user} />
+      <Nav currentUser={user} />
       <div className="min-h-screen">{children}</div>
     </>
   );
