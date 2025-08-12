@@ -39,10 +39,10 @@ export async function POST(req: Request) {
     // 3) create the user writing to *model* fields that map to your columns
     const created = await db.user.create({
       data: {
-        name: fullName,         // -> column "name"
+        displayName: fullName,         // -> column "name"
         secretCode: secretCode, // -> column "secretcode"
       },
-      select: { id: true, name: true, secretCode: true }
+      select: { id: true, displayName: true, secretCode: true }
     });
 
     return NextResponse.json({ ok: true, user: created }, { status: 200 });
