@@ -5,8 +5,9 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { db } from "@/src/lib/db";
 import Nav from "@/src/components/Nav";
+import SiteBrand from "@/src/components/SiteBrand";
 
-export default async function ProtectedLayout({ children }: { children: React.ReactNode }) {
+export default async function ProtectedLayout({ children, }: { children: React.ReactNode }) {
   const sid = cookies().get("sid")?.value;
   if (!sid) redirect("/login?next=/home");
 
@@ -18,9 +19,11 @@ export default async function ProtectedLayout({ children }: { children: React.Re
   if (!currentUser) redirect("/login?next=/home");
 
   return (
-    <>
-      <Nav currentUser={currentUser} />
-      <div className="min-h-screen">{children}</div>
-    </>
+    <div className= "min-h-screen flex flex-col">
+      <SiteBrand />
+      <Nav currentUser={{ displayName : User.displayName, isAdmin: user.isAdmin}} />
+      <main className="flex-1">{children}</main>
+    </div>
   );
+}
 }
