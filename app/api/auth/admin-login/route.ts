@@ -10,7 +10,7 @@ export async function POST(req: Request) {
       select : { id: true, displayName: true, isAdmin: true, adminPassword: true},
     });
     
-    if (!user || !User.isAdmin || !password || password !== user.adminPassword) {
+    if (!user || !user.isAdmin || !password || password !== user.adminPassword) {
       return NextResponse.json({ ok: false, error: "Invalid admin credentials" }, { status: 401 });
     }
 
