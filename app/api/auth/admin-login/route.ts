@@ -7,10 +7,10 @@ export async function POST(req: Request) {
     const { email = "", password = "" } = await req.json();
     const user = await db.user.findUnique({
       where: { email: String(email).trim().toLowerCase() },
-      select : { id: true, displayName: true, isAdmin: true, admin_password: true},
+      select : { id: true, displayName: true, isAdmin: true, adminPassword: true},
     });
     
-    if (!user || !User.isAdmin || !password || password !== user.admin_password) {
+    if (!user || !User.isAdmin || !password || password !== user.adminPassword) {
       return NextResponse.json({ ok: false, error: "Invalid admin credentials" }, { status: 401 });
     }
 
