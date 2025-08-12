@@ -2,13 +2,16 @@ import { NextResponse } from "next/server";
 import { db } from "@/src/lib/db";
 import crypto from "crypto";
 
-const COOKIE_NAME = "session";
-
 export async function POST(req: Request) {
   try {
-    const { email, lastName } = await req.json();
-    if (!email || !lastName) {
-      return NextResponse.json({ ok: false, error: "Missing fields" }, { status: 400 });
+    const { email = "", password = "" } = await req.json();
+    const user = await db.user.findUnique({
+      where: { email: String(email).trim().toLowerCase() },
+      select : { id: true, displayname: true, isAdmin: true, admin_password: true},
+    });
+    
+    if (!user || !User.isAdmin || !password || password !== user.admin_password) {
+      return NextResponse.json({ ok: false, error: "Invalid admin credentials" }, { status: 401 });
     }
 
     const admin = await db.user.findFirst({
@@ -19,17 +22,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: "Invalid admin credentials" }, { status: 401 });
     }
 
-    const token = crypto.randomBytes(32).toString("hex");
-    const expiresAt = new Date(Date.now() + 1000*60*60*24*30);
-    await db.session.create({ data: { userId: admin.id, token, expiresAt } });
-
-    const res = NextResponse.json({ ok: true });
-    res.cookies.set(COOKIE_NAME, token, {
-      httpOnly: true, sameSite: "lax", secure: true, path: "/", expires: expiresAt,
+    const res = NextResponse.json({ ok: true, user: { id: user.id, displayName, isAdmin: true }});
+    res.cookies.set("sid", user.id, {
+      httpOnly: true, sameSite: "lax", secure: !!process.env.Vercel, path: "/", maxAge: 60*60*24*30,
     });
     return res;
-  } catch (err) {
+  } catch (e) {
     console.error("ADMIN LOGIN ERROR", err);
-    return NextResponse.json({ ok: false, error: "Admin login failed" }, { status: 500 });
+    return NextResponse.json({ ok: false, error: "Server Error" }, { status: 500 });
   }
 }
