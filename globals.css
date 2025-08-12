@@ -1,0 +1,17 @@
+/* Tailwind layers */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Small safety net so it still looks ok even if Tailwind fails to load */
+html, body {
+  min-height: 100%;
+}
+a {
+  color: inherit;
+  text-decoration: none;
+}
+.page {
+  /* fallback centering if tailwind isn't loaded */
+  display: block;
+}
