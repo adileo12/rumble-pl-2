@@ -1,6 +1,6 @@
 // app/(public)/login/LoginInner.tsx
 "use client";
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -10,7 +10,7 @@ export default function LoginInner() {
   const [err, setErr] = useState<string | null>(null);
   const router = useRouter();
   const sp = useSearchParams();
-  const next = sp.get("next") || "/home";
+  const next = sp.get("next") || "sp.get("from") || "/home";
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -19,16 +19,19 @@ export default function LoginInner() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        cache: "no-store",
         body: JSON.stringify({ secretCode }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data?.ok) throw new Error(data?.error || "Login failed");
-      router.replace(next);
+      if (!res.ok || !data?.ok) throw new Error(data?.error || 'Login failed (status ${res.status}')");
+    }
+      
+    window.location.assign(next);
+    
     } catch (e: any) {
       setErr(e.message || "Login failed");
-    } finally {
       setLoading(false);
-    }
   }
 
   return (
@@ -65,4 +68,10 @@ export default function LoginInner() {
       </div>
     </main>
   );
+}
+
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="p-6">Loading...</div>}></Suspense>);
 }
