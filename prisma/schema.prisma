@@ -20,6 +20,7 @@ model User {
 
   // NEW (admin only; optional for normal users)
   email        String?  @unique
+  adminPassword String? @map("admin_password")
   lastName     String?
 
   picks        Pick[]
