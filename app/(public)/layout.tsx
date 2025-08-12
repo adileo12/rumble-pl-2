@@ -1,18 +1,5 @@
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-
-import React from "react";
-import SiteBrand from "@/src/components/SiteBrand";
-
-export default function PublicLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="min-h-screen flex flex-col">
-      <SiteBrand />
-      <main className="flex-1">{children}</main>
-    </div>
-  );
+// app/(public)/layout.tsx
+export default function PublicLayout({ children }: { children: React.ReactNode }) {
+  // No header/brand here. The global brand is already in app/layout.tsx
+  return <div className="page">{children}</div>;
 }
