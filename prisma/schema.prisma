@@ -27,6 +27,8 @@ model User {
   statuses     UserStatus[]
   sessions     Session[]
   jokerUsages  JokerUsage[]
+
+@@map ("User")
 }
 
 model Season {
