@@ -1,20 +1,23 @@
-// app/(public)/login/LoginInner.tsx
 "use client";
 import { useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
-export default function LoginInner() {
+function Inner() {
   const [secretCode, setSecret] = useState("");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
   const router = useRouter();
   const sp = useSearchParams();
-  const next = sp.get("next") || "sp.get("from") || "/home";
+
+  // accept ?next= or ?from=; default to /home
+  const next = sp.get("next") || sp.get("from") || "/home";
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    setErr(null); setLoading(true);
+    setErr(null);
+    setLoading(true);
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
@@ -23,15 +26,18 @@ export default function LoginInner() {
         cache: "no-store",
         body: JSON.stringify({ secretCode }),
       });
+
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data?.ok) throw new Error(data?.error || 'Login failed (status ${res.status}')");
-    }
-      
-    window.location.assign(next);
-    
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || `Login failed (status ${res.status})`);
+      }
+
+      // Hard navigation so the new cookie is sent immediately
+      window.location.assign(next);
     } catch (e: any) {
       setErr(e.message || "Login failed");
       setLoading(false);
+    }
   }
 
   return (
@@ -70,8 +76,10 @@ export default function LoginInner() {
   );
 }
 
-
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div className="p-6">Loading...</div>}></Suspense>);
+    <Suspense fallback={<div className="p-6">Loading…</div>}>
+      <Inner />
+    </Suspense>
+  );
 }
