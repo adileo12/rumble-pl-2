@@ -1,92 +1,60 @@
 import { NextResponse } from "next/server";
 import { db } from "@/src/lib/db";
 
-function mask(s?: string | null) {
-  if (!s) return "<null>";
-  if (s.length <= 2) return "*".repeat(s.length);
-  return s[0] + "*".repeat(Math.max(0, s.length - 2)) + s[s.length - 1];
-}
-
-async function readCredentials(req: Request) {
-  const ct = req.headers.get("content-type") || "";
-  let email = "";
-  let password = "";
-
-  try {
-    if (ct.includes("application/json")) {
-      const b = await req.json();
-      email = String(b?.email || "").trim().toLowerCase();
-      password = String(b?.password || "").trim();
-      return { email, password, source: "json" as const, ct };
-    }
-
-    if (ct.includes("application/x-www-form-urlencoded") || ct.includes("multipart/form-data")) {
-      const fd = await req.formData();
-      email = String(fd.get("email") || "").trim().toLowerCase();
-      password = String(fd.get("password") || "").trim();
-      return { email, password, source: "form" as const, ct };
-    }
-
-    // Fallback: try JSON anyway
-    const b = await req.json().catch(() => ({}));
-    email = String(b?.email || "").trim().toLowerCase();
-    password = String(b?.password || "").trim();
-    return { email, password, source: "fallback-json" as const, ct };
-  } catch {
-    return { email: "", password: "", source: "parse-error" as const, ct };
-  }
-}
-
 export async function POST(req: Request) {
   try {
-    const { email, password, source, ct } = await readCredentials(req);
-    console.log("[ADMIN-LOGIN] headers.ct:", ct, "source:", source, "email:", email, "pwLen:", password.length);
+    const { email = "", password = "" } = await req.json();
 
-    if (!email || !password) {
-      return NextResponse.json({ ok: false, reason: "missing-fields", debug: { ct, source } }, { status: 400 });
+    const e = String(email).trim().toLowerCase();
+    const p = String(password).trim();
+
+    if (!e || !p) {
+      return NextResponse.json(
+        { ok: false, error: "Missing fields" },
+        { status: 400 }
+      );
     }
 
+    // Your schema uses: User { email, name, isAdmin, adminPassword }
     const user = await db.user.findUnique({
-      where: { email },
-      select: { id: true, displayName: true, isAdmin: true, adminPassword: true, email: true },
+      where: { email: e },
+      select: { id: true, name: true, isAdmin: true, adminPassword: true },
     });
 
-    if (!user) {
-      console.log("[ADMIN-LOGIN] user-not-found", { email });
-      return NextResponse.json({ ok: false, reason: "user-not-found" }, { status: 401 });
-    }
-    if (!user.isAdmin) {
-      console.log("[ADMIN-LOGIN] not-admin", { id: user.id, email: user.email });
-      return NextResponse.json({ ok: false, reason: "not-admin" }, { status: 401 });
+    if (!user || !user.isAdmin) {
+      return NextResponse.json(
+        { ok: false, error: "Invalid credentials" },
+        { status: 401 }
+      );
     }
 
-    const stored = user.adminPassword ?? "";
-    const match = stored === password;
-
-    console.log("[ADMIN-LOGIN] found", {
-      id: user.id,
-      isAdmin: user.isAdmin,
-      storedMasked: mask(stored),
-      storedLen: stored.length,
-      pwLen: password.length,
-      match,
-    });
-
-    if (!match) {
-      return NextResponse.json({ ok: false, reason: "bad-password" }, { status: 401 });
+    if (!user.adminPassword || p !== user.adminPassword) {
+      return NextResponse.json(
+        { ok: false, error: "Invalid credentials" },
+        { status: 401 }
+      );
     }
 
-    const res = NextResponse.json({ ok: true, user: { id: user.id, name: user.displayName, isAdmin: true } });
+    // Same cookie name as normal login ("sid" → user.id)
+    const res = NextResponse.json(
+      { ok: true, user: { id: user.id, displayName: user.name, isAdmin: user.isAdmin } },
+      { status: 200 }
+    );
+
+    // secure = true on Vercel (HTTPS), false locally if needed
+    const secure = process.env.VERCEL ? true : false;
+
     res.cookies.set("sid", user.id, {
       httpOnly: true,
       sameSite: "lax",
-      secure: !!process.env.VERCEL,
+      secure,
       path: "/",
       maxAge: 60 * 60 * 24 * 30,
     });
+
     return res;
-  } catch (err) {
-    console.error("[ADMIN-LOGIN] error", err);
-    return NextResponse.json({ ok: false, reason: "server-error" }, { status: 500 });
+  } catch (err: any) {
+    console.error("ADMIN LOGIN ERROR:", err);
+    return NextResponse.json({ ok: false, error: "Server error" }, { status: 500 });
   }
 }
