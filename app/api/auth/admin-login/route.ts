@@ -7,7 +7,7 @@ export async function POST(req: Request) {
     const { email = "", password = "" } = await req.json();
     const user = await db.user.findUnique({
       where: { email: String(email).trim().toLowerCase() },
-      select : { id: true, displayname: true, isAdmin: true, admin_password: true},
+      select : { id: true, displayName: true, isAdmin: true, admin_password: true},
     });
     
     if (!user || !User.isAdmin || !password || password !== user.admin_password) {
