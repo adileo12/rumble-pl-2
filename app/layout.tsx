@@ -1,21 +1,28 @@
-// app/layout.tsx
-import type { Metadata } from "next";
+import "./globals.css";
+import Image from "next/image";
+import Link from "next/link";
 
-export const metadata: Metadata = {
-  title: "Rumble",
-  description: "Rumble PL",
-};
-
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      {/* Global <head> is handled by Next; add fonts/meta in here if needed */}
-      <body className="min-h-screen bg-white text-black">
-        {children}
+      <body className="min-h-screen flex flex-col">
+        {/* Persistent Header */}
+        <header className="w-full border-b bg-white shadow-sm py-4">
+          <div className="flex justify-center items-center gap-3">
+            <span className="text-3xl font-extrabold tracking-wide">HAVEN</span>
+            <Image
+              src="/haven-logo.png"
+              alt="Haven Games Logo"
+              width={50}
+              height={50}
+              className="object-contain"
+            />
+            <span className="text-3xl font-extrabold tracking-wide">GAMES</span>
+          </div>
+        </header>
+
+        {/* Page Content */}
+        <main className="flex-1">{children}</main>
       </body>
     </html>
   );
