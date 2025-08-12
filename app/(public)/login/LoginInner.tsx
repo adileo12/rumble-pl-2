@@ -34,41 +34,33 @@ export default function LoginInner() {
   }
 
   return (
-    <div className="relative min-h-screen flex items-center justify-center bg-gradient-to-b from-zinc-50 to-zinc-100 dark:from-zinc-900 dark:to-black">
-      <div className="w-full max-w-sm px-4 text-center">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-white">
+      <div className="w-full max-w-xs text-center">
         {/* Header */}
-        <h1 className="text-4xl md:text-5xl font-extrabold mb-8">
-          HAVEN <span className="opacity-80">GAMES</span>
-        </h1>
+        <h1 className="text-4xl font-extrabold mb-8">HAVEN GAMES</h1>
 
         {/* Form */}
-        <form
-          onSubmit={submit}
-          className="bg-white dark:bg-zinc-900/60 p-6 rounded-xl shadow-sm border dark:border-zinc-800"
-        >
-          <div className="mb-4">
-            <label className="block text-sm mb-1 opacity-80">Secret code</label>
-            <input
-              className="w-full rounded-md border px-4 py-3 text-lg outline-none focus:ring-2 focus:ring-black/10 dark:focus:ring-white/20 dark:border-zinc-700 bg-white dark:bg-zinc-800"
-              value={secretCode}
-              onChange={(e) => setSecret(e.target.value)}
-              autoComplete="off"
-              required
-            />
-          </div>
+        <form onSubmit={submit} className="flex flex-col items-center">
+          <input
+            type="text"
+            placeholder="Secret code"
+            value={secretCode}
+            onChange={(e) => setSecret(e.target.value)}
+            className="border rounded-md px-4 py-3 text-lg mb-4 w-full text-center"
+            required
+          />
 
           {err && <p className="text-red-600 text-sm mb-2">{err}</p>}
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-md bg-black text-white py-3 text-lg font-medium disabled:opacity-60"
+            className="bg-blue-600 hover:bg-blue-700 text-white py-3 px-6 rounded-md text-lg mb-2 w-full"
           >
             {loading ? "Signing in…" : "Sign in"}
           </button>
 
-          {/* Small signup link under button */}
-          <p className="text-xs mt-3">
+          <p className="text-xs">
             New here?{" "}
             <Link href="/signup" className="underline">
               Create your secret code
