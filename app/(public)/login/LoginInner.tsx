@@ -10,7 +10,7 @@ function Inner() {
   const [err, setErr] = useState<string | null>(null);
   const router = useRouter();
   const sp = useSearchParams();
-  const next = sp.get("next") || "/home";
+  const next = sp.get("next") || "/rumble";
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
