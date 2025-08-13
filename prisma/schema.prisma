@@ -50,6 +50,8 @@ model Gameweek {
   isLocked          Boolean         @default(false)
   graded            Boolean         @default(false)
   season            Season          @relation(fields: [seasonId], references: [id])
+  start   DateTime // GW open time
+  end     DateTime // GW end (after last match)
   picks             Pick[]
   fixtures          Fixture[]
   jokerAssignments  JokerAssignment[]
@@ -74,16 +76,21 @@ model Club {
 
 model Fixture {
   id           String   @id @default(uuid())
-  gameweekId   String
+  gwId      String
+  gw        Gameweek @relation(fields: [gwId], references: [id])
   homeClubId   String
   awayClubId   String
   kickoff      DateTime
   homeGoals    Int?
   awayGoals    Int?
   status       String
-  gameweek     Gameweek @relation(fields: [gameweekId], references: [id])
-  homeClub     Club     @relation("HomeClub", fields: [homeClubId], references: [id])
-  awayClub     Club     @relation("AwayClub", fields: [awayClubId], references: [id])
+  homeId    String
+  awayId    String
+  homeTeam  Team     @relation("HomeTeam", fields: [homeId], references: [id])
+  awayTeam  Team     @relation("AwayTeam", fields: [awayId], references: [id])
+
+  @@index([gwId)
+  @@index([kickoff)
 }
 
 model Pick {
@@ -91,14 +98,16 @@ model Pick {
   userId      String
   seasonId    String 
   gameweekId  String
-  clubId      String
+  teamId      String
   createdAt   DateTime @default(now())
   source      String   @default("USER")
   user        User     @relation(fields: [userId], references: [id])
-  gameweek    Gameweek @relation(fields: [gameweekId], references: [id])
-  club        Club     @relation(fields: [clubId], references: [id])
+  gwID        String
+  gw          Gameweek @relation(fields: [gwId], references: [id])
+  team        Team     @relation(fields: [teamId], references: [id])
 
-  @@unique([userId, gameweekId], name: "userId_gameweekId")
+  @@unique([userId, gwId])
+  @@unique([userId, teamId])
 }
 
 model UserStatus {
@@ -146,4 +155,15 @@ model JokerUsage {
   user        User     @relation(fields: [userId], references: [id])
   gameweek    Gameweek @relation(fields: [gameweekId], references: [id])
   club        Club     @relation(fields: [clubId], references: [id])
+}
+
+
+model Team {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  shortName String?
+  code      String?  @unique
+  fixturesH Fixture[] @relation("HomeTeam")
+  fixturesA Fixture[] @relation("AwayTeam")
+  picks     Pick[]
 }
