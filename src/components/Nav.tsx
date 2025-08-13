@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { usePathname } from "next/navigation";
 
 type User = {
@@ -43,20 +42,13 @@ export default function Nav({ currentUser }: { currentUser: User }) {
 
   return (
     <header className="w-full border-b bg-white">
-      {/* 3-column grid: left = nav, center = brand, right = user */}
-      <nav className="mx-auto grid max-w-5xl grid-cols-3 items-center px-4 py-3">
+      <nav className="mx-auto grid max-w-5xl grid-cols-2 items-center px-4 py-3">
         {/* Left: links */}
         <ul className="flex items-center gap-6 text-sm justify-start">
           <NavLink href="/home">Dashboard</NavLink>
           <NavLink href="/leaderboard">Leaderboard</NavLink>
           {currentUser?.isAdmin && <NavLink href="/admin">Admin</NavLink>}
         </ul>
-
-        {/* Center: HAVEN [logo] GAMES */}
-        <div className="flex items-center justify-center gap-3">
-          <span className="text-2xl font-extrabold tracking-wide">HAVEN</span>
-          <span className="text-2xl font-extrabold tracking-wide">GAMES</span>
-        </div>
 
         {/* Right: user + logout */}
         <div className="flex items-center justify-end gap-3 text-sm">
