@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 
 type User = {
@@ -36,25 +37,37 @@ function NavLink({
 
 export default function Nav({ currentUser }: { currentUser: User }) {
   async function logout() {
-    // call your logout endpoint and then do a full nav to /login
     await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
     window.location.assign("/login");
   }
 
   return (
     <header className="w-full border-b bg-white">
-      <nav className="mx-auto flex max-w-5xl items-center justify-between p-4">
-        <Link href="/" className="text-xl font-semibold">
-          Rumble
-        </Link>
-
-        <ul className="flex items-center gap-6 text-sm">
+      {/* 3-column grid: left = nav, center = brand, right = user */}
+      <nav className="mx-auto grid max-w-5xl grid-cols-3 items-center px-4 py-3">
+        {/* Left: links */}
+        <ul className="flex items-center gap-6 text-sm justify-start">
           <NavLink href="/home">Dashboard</NavLink>
           <NavLink href="/leaderboard">Leaderboard</NavLink>
           {currentUser?.isAdmin && <NavLink href="/admin">Admin</NavLink>}
         </ul>
 
-        <div className="flex items-center gap-3 text-sm">
+        {/* Center: HAVEN [logo] GAMES */}
+        <div className="flex items-center justify-center gap-3">
+          <span className="text-2xl font-extrabold tracking-wide">HAVEN</span>
+          <Image
+            src="/haven-logo.png"
+            alt="Haven Games Logo"
+            width={36}
+            height={36}
+            className="object-contain"
+            priority
+          />
+          <span className="text-2xl font-extrabold tracking-wide">GAMES</span>
+        </div>
+
+        {/* Right: user + logout */}
+        <div className="flex items-center justify-end gap-3 text-sm">
           <span className="opacity-70">{currentUser?.displayName}</span>
           <button
             onClick={logout}
