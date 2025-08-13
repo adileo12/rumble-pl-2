@@ -55,14 +55,6 @@ export default function Nav({ currentUser }: { currentUser: User }) {
         {/* Center: HAVEN [logo] GAMES */}
         <div className="flex items-center justify-center gap-3">
           <span className="text-2xl font-extrabold tracking-wide">HAVEN</span>
-          <Image
-            src="/haven-logo.png"
-            alt="Haven Games Logo"
-            width={36}
-            height={36}
-            className="object-contain"
-            priority
-          />
           <span className="text-2xl font-extrabold tracking-wide">GAMES</span>
         </div>
 
