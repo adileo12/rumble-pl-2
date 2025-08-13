@@ -1,60 +1,70 @@
+// app/api/auth/admin-login/route.ts
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { db } from "@/src/lib/db";
+import { db } from "@/src/lib/db"; // <- keep this path consistent with your project
 
 export async function POST(req: Request) {
   try {
-    const { username, password } = await req.json();
+    const { email = "", password = "" } = await req.json();
+    const e = String(email).trim().toLowerCase();
+    const p = String(password);
 
-    if (!username || !password) {
+    if (!e || !p) {
       return NextResponse.json(
-        { ok: false, error: "Username and password are required" },
+        { ok: false, error: "Missing fields" },
         { status: 400 }
       );
     }
 
-    // Find the admin user by username
-    const adminUser = await db.user.findUnique({
-      where: { username },
-      select: { id: true, displayName: true, passwordHash: true, isAdmin: true },
+    // Look up by unique email
+    const user = await db.user.findUnique({
+      where: { email: e },
+      // NOTE: Prisma field names here should match your schema.
+      // If your Prisma model maps DB columns, this assumes:
+      //   displayName -> maps to "name"
+      //   adminPassword -> maps to "adminpassword"
+      select: { id: true, displayName: true, isAdmin: true, adminPassword: true },
     });
 
-    if (!adminUser || !adminUser.isAdmin) {
+    if (!user || !user.isAdmin) {
       return NextResponse.json(
-        { ok: false, error: "Invalid admin credentials" },
+        { ok: false, error: "Invalid credentials" },
         { status: 401 }
       );
     }
 
-    // Compare plain text password with hashed password in DB
-    const isMatch = await bcrypt.compare(password, adminUser.passwordHash);
+    // Accept either a hashed adminPassword or (as a fallback) plain equality
+    let valid = false;
+    if (user.adminPassword?.startsWith("$2")) {
+      valid = await bcrypt.compare(p, user.adminPassword);
+    } else {
+      valid = user.adminPassword === p;
+    }
 
-    if (!isMatch) {
+    if (!valid) {
       return NextResponse.json(
-        { ok: false, error: "Invalid admin credentials" },
+        { ok: false, error: "Invalid credentials" },
         { status: 401 }
       );
     }
 
-    // You can set a cookie or token here for admin session
-    // Example:
-    // const token = createAuthToken(adminUser.id);
-    // setCookie(res, 'admin_token', token);
-
-    return NextResponse.json({
-      ok: true,
-      message: "Admin login successful",
-      admin: {
-        id: adminUser.id,
-        displayName: adminUser.displayName,
-        isAdmin: adminUser.isAdmin,
-      },
-    });
-  } catch (err) {
-    console.error("Admin login error:", err);
-    return NextResponse.json(
-      { ok: false, error: "Internal server error" },
-      { status: 500 }
+    const res = NextResponse.json(
+      { ok: true, user: { id: user.id, displayName: user.displayName, isAdmin: user.isAdmin } },
+      { status: 200 }
     );
+
+    // Set the same session cookie your protected layout expects
+    res.cookies.set("sid", user.id, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: !!process.env.VERCEL, // true on Vercel (HTTPS), false locally
+      path: "/",
+      maxAge: 60 * 60 * 24 * 30, // 30 days
+    });
+
+    return res;
+  } catch (err) {
+    console.error("[admin-login] ERROR:", err);
+    return NextResponse.json({ ok: false, error: "Server error" }, { status: 500 });
   }
 }
