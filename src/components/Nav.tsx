@@ -9,15 +9,9 @@ type User = {
   isAdmin: boolean;
 };
 
-function NavLink({
-  href,
-  children,
-}: {
-  href: string;
-  children: React.ReactNode;
-}) {
+function NavLink({ href, children }: { href: string; children: React.ReactNode }) {
   const pathname = usePathname();
-  const active = pathname === href;
+  const active = pathname === href || pathname.startsWith(href + "/");
   return (
     <li>
       <Link
@@ -42,17 +36,17 @@ export default function Nav({ currentUser }: { currentUser: User }) {
 
   return (
     <header className="w-full border-b bg-white">
-      <nav className="mx-auto grid max-w-5xl grid-cols-2 items-center px-4 py-3">
-        {/* Left: links */}
-        <ul className="flex items-center gap-6 text-sm justify-start">
-          <NavLink href="/home">Dashboard</NavLink>
-          <NavLink href="/leaderboard">Leaderboard</NavLink>
+      {/* simple bar (brand sits in global app/layout) */}
+      <nav className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
+        <ul className="flex items-center gap-6 text-sm">
+          <NavLink href="/rumble">Rumble</NavLink>
+          <NavLink href="/predictor">Predictor</NavLink>
+          <NavLink href="/profile">Profile</NavLink>
+          {/* Optional: keep admin visible only to admins (you didn’t ask, but handy) */}
           {currentUser?.isAdmin && <NavLink href="/admin">Admin</NavLink>}
         </ul>
 
-        {/* Right: user + logout */}
-        <div className="flex items-center justify-end gap-3 text-sm">
-          <span className="opacity-70">{currentUser?.displayName}</span>
+        <div className="flex items-center gap-3 text-sm">
           <button
             onClick={logout}
             className="rounded border px-2 py-1 text-xs hover:bg-black hover:text-white"
