@@ -3,15 +3,16 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("POSTGRES_PRISMA_URL")
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+  relationMode = "prisma"
 }
 
 model User {
   id                String        @id @default(uuid())
-  displayName       String        @map("name")
-  secretCode         String   @unique(map: "User_secretCode_key") @map("secretcode")
-  joinCode          String        @default("PUBLIC")
+  name              String        @map("name")
+  secretCode        String        @unique(map: "User_secretCode_key") @map("secretcode")
+  joinCode          String?       @default("PUBLIC")
   isAdmin           Boolean       @default(false)
   alive             Boolean       @default(true)
   createdAt         DateTime      @default(now())
