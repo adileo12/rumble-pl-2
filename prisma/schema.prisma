@@ -3,32 +3,31 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("POSTGRES_PRISMA_URL")
+  provider = "postgresql"
+  url      = env("POSTGRES_PRISMA_URL")
 }
 
-
 model User {
-  id           String   @id @default(uuid())
-  displayName  String   @map("name")
-  secretCode   String   @unique @map("secretcode")
-  joinCode     String   @default("PUBLIC")
-  isAdmin      Boolean  @default(false)
-  alive        Boolean  @default(true)
-  createdAt    DateTime @default(now())
+  id                 String        @id @default(uuid())
+  displayName        String        @map("name")
+  secretCode         String        @unique @map("secretcode")
+  joinCode           String        @default("PUBLIC")
+  isAdmin            Boolean       @default(false)
+  alive              Boolean       @default(true)
+  createdAt          DateTime      @default(now())
 
-  // NEW (admin only; optional for normal users)
-  email        String?  @unique
-  adminPassword String? @map("admin_password")
-  adminPasswordHash String? @map("adminpasswordhash")
-  lastName     String?
+  // Admin-only (optional for normal users)
+  email              String?       @unique
+  adminPassword      String?       @map("admin_password")
+  adminPasswordHash  String?       @map("adminpasswordhash")
+  lastName           String?
 
-  picks        Pick[]
-  statuses     UserStatus[]
-  sessions     Session[]
-  jokerUsages  JokerUsage[]
+  picks              Pick[]
+  statuses           UserStatus[]
+  sessions           Session[]
+  jokerUsages        JokerUsage[]
 
-@@map ("User")
+  @@map("User")
 }
 
 model Season {
@@ -42,15 +41,17 @@ model Season {
 }
 
 model Gameweek {
-  id                String          @id @default(uuid())
+  id                String      @id @default(uuid())
   seasonId          String
   number            Int
   deadline          DateTime
-  isLocked          Boolean         @default(false)
-  graded            Boolean         @default(false)
-  season            Season          @relation(fields: [seasonId], references: [id])
-  start   DateTime // GW open time
-  end     DateTime // GW end (after last match)
+  isLocked          Boolean     @default(false)
+  graded            Boolean     @default(false)
+  season            Season      @relation(fields: [seasonId], references: [id])
+
+  start             DateTime    // GW open time
+  end               DateTime    // GW end (after last match)
+
   picks             Pick[]
   fixtures          Fixture[]
   jokerAssignments  JokerAssignment[]
@@ -60,33 +61,39 @@ model Gameweek {
 }
 
 model Club {
-  id                String        @id @default(uuid())
+  id                String           @id @default(uuid())
   name              String
   shortName         String
   crestUrl          String?
-  active            Boolean       @default(true)
-  fplTeamId         Int?          @unique
+  active            Boolean          @default(true)
+  fplTeamId         Int?             @unique
+
+  // back-relations
   picks             Pick[]
-  homeFix           Fixture[]     @relation("HomeTeam")
-  awayFix           Fixture[]     @relation("AwayTeam")
+  homeFix           Fixture[]        @relation("HomeTeam")
+  awayFix           Fixture[]        @relation("AwayTeam")
   jokerAssignments  JokerAssignment[]
   jokerUsages       JokerUsage[]
 }
 
 model Fixture {
   id           String   @id @default(uuid())
-  gwId      String
-  gw        Gameweek @relation(fields: [gwId], references: [id])
+
+  // gameweek
+  gwId         String
+  gw           Gameweek @relation(fields: [gwId], references: [id])
+
+  // clubs (home/away) — note relation names match Club.homeFix/awayFix
   homeClubId   String
+  homeClub     Club     @relation("HomeTeam", fields: [homeClubId], references: [id])
+
   awayClubId   String
+  awayClub     Club     @relation("AwayTeam", fields: [awayClubId], references: [id])
+
   kickoff      DateTime
   homeGoals    Int?
   awayGoals    Int?
   status       String
-  homeId    String
-  awayId    String
-  homeTeam  Team     @relation("HomeTeam", fields: [homeId], references: [id])
-  awayTeam  Team     @relation("AwayTeam", fields: [awayId], references: [id])
 
   @@index([gwId])
   @@index([kickoff])
@@ -95,18 +102,25 @@ model Fixture {
 model Pick {
   id          String   @id @default(uuid())
   userId      String
-  seasonId    String 
-  gameweekId  String
-  teamId      String
+  seasonId    String
+
+  // One field for gameweek FK
+  gwId        String
+  gw          Gameweek @relation(fields: [gwId], references: [id])
+
+  // Picked CLUB (not Team)
+  clubId      String
+  club        Club     @relation(fields: [clubId], references: [id])
+
   createdAt   DateTime @default(now())
   source      String   @default("USER")
   user        User     @relation(fields: [userId], references: [id])
-  gwId       String
-  gw          Gameweek @relation(fields: [gwId], references: [id])
-  team        Team     @relation(fields: [teamId], references: [id])
 
+  // one pick per user per GW
   @@unique([userId, gwId])
-  @@unique([userId, teamId])
+
+  // user can only ever pick a club once across the whole game
+  @@unique([userId, clubId])
 }
 
 model UserStatus {
@@ -117,6 +131,7 @@ model UserStatus {
   eliminatedGw        Int?
   jokerLifelinesLeft  Int      @default(2)
   lastUpdated         DateTime @default(now())
+
   user                User     @relation(fields: [userId], references: [id])
   season              Season   @relation(fields: [seasonId], references: [id])
 
@@ -138,6 +153,7 @@ model JokerAssignment {
   gameweekId  String
   clubId      String
   createdAt   DateTime @default(now())
+
   season      Season   @relation(fields: [seasonId], references: [id])
   gameweek    Gameweek @relation(fields: [gameweekId], references: [id])
   club        Club     @relation(fields: [clubId], references: [id])
@@ -151,18 +167,8 @@ model JokerUsage {
   gameweekId  String
   clubId      String
   pickedAt    DateTime @default(now())
+
   user        User     @relation(fields: [userId], references: [id])
   gameweek    Gameweek @relation(fields: [gameweekId], references: [id])
   club        Club     @relation(fields: [clubId], references: [id])
-}
-
-
-model Team {
-  id        String   @id @default(uuid())
-  name      String   @unique
-  shortName String?
-  code      String?  @unique
-  fixturesH Fixture[] @relation("HomeTeam")
-  fixturesA Fixture[] @relation("AwayTeam")
-  picks     Pick[]
 }
