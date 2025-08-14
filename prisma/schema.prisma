@@ -49,8 +49,8 @@ model Gameweek {
   graded           Boolean     @default(false)
   season           Season      @relation(fields: [seasonId], references: [id])
 
-  start            DateTime
-  end              DateTime
+  start            DateTime?
+  end              DateTime?
 
   picks            Pick[]
   fixtures         Fixture[]
