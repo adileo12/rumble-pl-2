@@ -16,7 +16,7 @@ model User {
   alive             Boolean       @default(true)
   createdAt         DateTime      @default(now())
 
-  email             String?       @unique
+   email        String?  @unique(map: "User_email_key")
   adminPassword     String?       @map("admin_password")
   adminPasswordHash String?       @map("adminpasswordhash")
   lastName          String?
