@@ -88,8 +88,8 @@ model Fixture {
   homeTeam  Team     @relation("HomeTeam", fields: [homeId], references: [id])
   awayTeam  Team     @relation("AwayTeam", fields: [awayId], references: [id])
 
-  @@index([gwId)
-  @@index([kickoff)
+  @@index([gwId])
+  @@index([kickoff])
 }
 
 model Pick {
