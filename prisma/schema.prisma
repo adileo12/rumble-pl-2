@@ -67,8 +67,8 @@ model Club {
   active            Boolean       @default(true)
   fplTeamId         Int?          @unique
   picks             Pick[]
-  homeFix           Fixture[]     @relation("HomeClub")
-  awayFix           Fixture[]     @relation("AwayClub")
+  homeFix           Fixture[]     @relation("HomeTeam")
+  awayFix           Fixture[]     @relation("AwayTeam")
   jokerAssignments  JokerAssignment[]
   jokerUsages       JokerUsage[]
 }
