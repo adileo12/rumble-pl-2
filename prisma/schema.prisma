@@ -4,32 +4,40 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  // You said you're using Vercel Postgres (Prisma Accelerate URL). Keep this var:
   url      = env("POSTGRES_PRISMA_URL")
 }
 
+/* =========================
+   USERS
+   ========================= */
 model User {
   id                 String        @id @default(uuid())
   displayName        String        @map("name")
   secretCode         String        @unique @map("secretcode")
-  joinCode           String        @default("PUBLIC")
-  isAdmin            Boolean       @default(false)
+  joinCode           String        @default("PUBLIC") // if your DB column is joincode, add: @map("joincode")
+  isAdmin            Boolean       @default(false)    // if DB column is isadmin, add: @map("isadmin")
   alive              Boolean       @default(true)
-  createdAt          DateTime      @default(now())
+  createdAt          DateTime      @default(now())    // if DB has timestamptz(6) you can add: @db.Timestamptz(6)
 
-  // Admin-only (optional for normal users)
+  // Admin-only (optional in DB)
   email              String?       @unique
   adminPassword      String?       @map("admin_password")
   adminPasswordHash  String?       @map("adminpasswordhash")
-  lastName           String?
+  lastName           String?       // optional; OK if column doesn't exist (Prisma will create it on new DB)
 
+  // Relations
   picks              Pick[]
   statuses           UserStatus[]
   sessions           Session[]
   jokerUsages        JokerUsage[]
 
-  @@map("User")
+  @@map("User") // your table is capitalized; keep this
 }
 
+/* =========================
+   SEASONS / GAMEWEEKS
+   ========================= */
 model Season {
   id                String            @id @default(uuid())
   name              String
@@ -49,8 +57,8 @@ model Gameweek {
   graded            Boolean     @default(false)
   season            Season      @relation(fields: [seasonId], references: [id])
 
-  start             DateTime    // GW open time
-  end               DateTime    // GW end (after last match)
+  start             DateTime
+  end               DateTime
 
   picks             Pick[]
   fixtures          Fixture[]
@@ -60,10 +68,13 @@ model Gameweek {
   @@unique([seasonId, number], name: "seasonId_number")
 }
 
+/* =========================
+   CLUBS / FIXTURES
+   ========================= */
 model Club {
   id                String           @id @default(uuid())
   name              String
-  shortName         String
+  shortName         String           // if this is nullable in DB, change to: String?
   crestUrl          String?
   active            Boolean          @default(true)
   fplTeamId         Int?             @unique
@@ -79,32 +90,36 @@ model Club {
 model Fixture {
   id           String   @id @default(uuid())
 
-  // gameweek
+  // GW relation
   gwId         String
   gw           Gameweek @relation(fields: [gwId], references: [id])
 
-  // clubs (home/away) — note relation names match Club.homeFix/awayFix
+  // home club
   homeClubId   String
   homeClub     Club     @relation("HomeTeam", fields: [homeClubId], references: [id])
 
+  // away club
   awayClubId   String
   awayClub     Club     @relation("AwayTeam", fields: [awayClubId], references: [id])
 
   kickoff      DateTime
   homeGoals    Int?
   awayGoals    Int?
-  status       String
+  status       String    // If your DB uses enum/text constraints, adjust later
 
   @@index([gwId])
   @@index([kickoff])
 }
 
+/* =========================
+   PICKS
+   ========================= */
 model Pick {
   id          String   @id @default(uuid())
   userId      String
   seasonId    String
 
-  // One field for gameweek FK
+  // One field for GW FK
   gwId        String
   gw          Gameweek @relation(fields: [gwId], references: [id])
 
@@ -114,15 +129,20 @@ model Pick {
 
   createdAt   DateTime @default(now())
   source      String   @default("USER")
+
+  // relations
   user        User     @relation(fields: [userId], references: [id])
 
   // one pick per user per GW
   @@unique([userId, gwId])
 
-  // user can only ever pick a club once across the whole game
+  // user can only ever pick a given club once total
   @@unique([userId, clubId])
 }
 
+/* =========================
+   STATUS / SESSIONS
+   ========================= */
 model UserStatus {
   id                  String   @id @default(uuid())
   userId              String
@@ -147,6 +167,9 @@ model Session {
   user       User     @relation(fields: [userId], references: [id])
 }
 
+/* =========================
+   JOKERS
+   ========================= */
 model JokerAssignment {
   id          String   @id @default(uuid())
   seasonId    String
