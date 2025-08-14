@@ -101,7 +101,7 @@ model Pick {
   createdAt   DateTime @default(now())
   source      String   @default("USER")
   user        User     @relation(fields: [userId], references: [id])
-  gwID        String
+  gwId       String
   gw          Gameweek @relation(fields: [gwId], references: [id])
   team        Team     @relation(fields: [teamId], references: [id])
 
