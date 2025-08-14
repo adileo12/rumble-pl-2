@@ -15,12 +15,15 @@ declare global {
   var __prisma__: PrismaClient | undefined;
 }
 
-export const db =
-  global.__prisma__ ??
-  new PrismaClient({
-    datasources: { db: { url: datasourceUrl } },
-    log: process.env.NODE_ENV === 'production' ? ['error'] : ['warn', 'error'],
-  });
+export const db = new PrismaClient({
+  datasources: {
+    db: {
+      url:
+        process.env.POSTGRES_PRISMA_URL || // Accelerate (if you have it)
+        process.env.POSTGRES_URL,          // fallback to plain
+    },
+  },
+});
 
 if (process.env.NODE_ENV !== 'production') {
   global.__prisma__ = db;
