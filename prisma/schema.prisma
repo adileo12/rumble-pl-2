@@ -113,8 +113,8 @@ model Pick {
 
   user       User     @relation(fields: [userId], references: [id])
 
-  @@unique([userId, gwId])
-  @@unique([userId, clubId])
+   @@unique([userId, gwId], map: "pick_unique_per_gw")
+   @@unique([userId, clubId], map: "pick_unique_user_club")
 }
 
 model UserStatus {
