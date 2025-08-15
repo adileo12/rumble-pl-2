@@ -114,6 +114,7 @@ model Pick {
   user       User     @relation(fields: [userId], references: [id])
 
  @@unique([userId, seasonId, gwId], name: "userId_seasonId_gwId")
+@@unique([userId, gwId], name: "userId_gwId")
   
 }
 
