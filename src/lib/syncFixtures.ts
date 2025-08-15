@@ -28,7 +28,7 @@ export async function syncFixturesForActiveSeason() {
       await db.fixture.upsert({
         where: { id: String(fx.id) },
         update: {
-          gameweekId: gw.id,
+          gwId: gw.id,
           kickoff: new Date(fx.kickoff_time!),
           homeGoals: fx.team_h_score ?? null,
           awayGoals: fx.team_a_score ?? null,
@@ -38,7 +38,7 @@ export async function syncFixturesForActiveSeason() {
         },
         create: {
           id: String(fx.id),
-          gameweekId: gw.id,
+          gwId: gw.id,
           kickoff: new Date(fx.kickoff_time!),
           status: fx.finished ? "FT" : "SCHEDULED",
           homeClubId: home.id,
