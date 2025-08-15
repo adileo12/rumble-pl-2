@@ -4,7 +4,7 @@ import { db } from './db';
 export function toIST(date: Date) {
   const utc = date.getTime() + date.getTimezoneOffset() * 60000;
   // IST is UTC+5:30
-  return new Date(utc + (5.5 * 60 * 60 * 1000));
+  return new Date(utc + 5.5 * 60 * 60 * 1000);
 }
 
 export async function getActiveSeason() {
@@ -16,14 +16,14 @@ export async function getCurrentGameweek(seasonId: string) {
   const now = new Date();
   const future = await db.gameweek.findFirst({
     where: { seasonId, deadline: { gte: now } },
-    orderBy: { deadline: 'asc' }
+    orderBy: { deadline: 'asc' },
   });
   if (future) return future;
 
   // fallback to latest past gw
   return db.gameweek.findFirst({
     where: { seasonId },
-    orderBy: { deadline: 'desc' }
+    orderBy: { deadline: 'desc' },
   });
 }
 
@@ -32,21 +32,22 @@ export async function getCurrentGameweek(seasonId: string) {
 export async function isLockedForGW(seasonId: string, gameweekId: string) {
   const first = await db.fixture.findFirst({
     where: {
-      gameweekId,                 // direct field on Fixture
-      gameweek: { seasonId },     // relate through Gameweek → Season
+      gwId: gameweekId, // field on Fixture
+      gw: { seasonId }, // relation to Gameweek → Season
     },
     orderBy: { kickoff: 'asc' },
     select: { kickoff: true },
   });
 
   if (!first?.kickoff) return false; // no fixtures -> not locked
-  return new Date() >= first.kickoff;
+  const lockAt = new Date(first.kickoff.getTime() - 30 * 60 * 1000);
+  return new Date() >= lockAt;
 }
 
 export async function clubsYouAlreadyPicked(userId: string, seasonId: string) {
   const rows = await db.pick.findMany({
     where: { userId, seasonId },
-    select: { clubId: true }
+    select: { clubId: true },
   });
-  return new Set(rows.map(r => r.clubId));
+  return new Set(rows.map((r) => r.clubId));
 }
