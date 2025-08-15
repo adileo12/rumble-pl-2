@@ -21,9 +21,9 @@ export async function POST(req: Request) {
       where: { email: e },
       // NOTE: Prisma field names here should match your schema.
       // If your Prisma model maps DB columns, this assumes:
-      //   displayName -> maps to "name"
+      //   name -> maps to "name"
       //   adminPassword -> maps to "adminpassword"
-      select: { id: true, displayName: true, isAdmin: true, adminPassword: true },
+      select: { id: true, name: true, isAdmin: true, adminPassword: true },
     });
 
     if (!user || !user.isAdmin) {
@@ -49,7 +49,7 @@ export async function POST(req: Request) {
     }
 
     const res = NextResponse.json(
-      { ok: true, user: { id: user.id, displayName: user.displayName, isAdmin: user.isAdmin } },
+      { ok: true, user: { id: user.id, name: user.name, isAdmin: user.isAdmin } },
       { status: 200 }
     );
 
