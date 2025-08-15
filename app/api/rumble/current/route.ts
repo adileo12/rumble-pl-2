@@ -40,7 +40,13 @@ export async function GET() {
 
   // Current pick (this GW)
   const currentPick = await db.pick.findUnique({
-  where: { userId_gwId: { userId: user.id, gwId: gw.id } },
+  where: {
+    userId_seasonId_gwId: {
+      userId: user.id,
+      seasonId: season.id,
+      gwId: gw.id,
+    },
+  },
   select: { clubId: true },
 });
 
