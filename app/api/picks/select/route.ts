@@ -34,10 +34,21 @@ export async function POST(req: Request) {
 
     // Upsert pick for this GW (allow change before lock)
     const pick = await db.pick.upsert({
-      where: { userId_gameweekId: { userId: user.id, gameweekId: gw.id } },
-      update: { clubId },
-       create: { userId: user.id,seasonId: season.id, gameweekId: gw.id, clubId }
-    });
+  where: {
+    userId_seasonId_gameweekId: {
+      userId: user.id,
+      seasonId: season.id,
+      gwId: gw.id,
+    },
+  },
+  update: { clubId },
+  create: {
+    userId: user.id,
+    seasonId: season.id,
+    gwId: gw.id,
+    clubId,
+  },
+});
 
     return NextResponse.json({ ok: true, pick });
   } catch (e:any) {
