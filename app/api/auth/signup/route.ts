@@ -17,8 +17,8 @@ export async function POST(req: Request) {
 
     // 1) block duplicate sign‑ups by name (case-insensitive match)
     const existing = await db.user.findFirst({
-      where: { displayName: { equals: fullName, mode: "insensitive" } },
-      select: { id: true, displayName: true }
+      where: { name: { equals: fullName, mode: "insensitive" } },
+      select: { id: true, name: true }
     });
     if (existing) {
       return NextResponse.json(
@@ -39,10 +39,10 @@ export async function POST(req: Request) {
     // 3) create the user writing to *model* fields that map to your columns
     const created = await db.user.create({
       data: {
-        displayName: fullName,         // -> column "name"
+        name: fullName,         // -> column "name"
         secretCode: secretCode, // -> column "secretcode"
       },
-      select: { id: true, displayName: true, secretCode: true }
+      select: { id: true, name: true, secretCode: true }
     });
 
     return NextResponse.json({ ok: true, user: created }, { status: 200 });
