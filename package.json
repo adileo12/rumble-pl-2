@@ -31,4 +31,11 @@
   "engines": {
     "node": ">=18 <23"
   }
+},
+
+{
+  "scripts": {
+    "postinstall": "prisma generate",
+    "build": "next build"
+  }
 }
