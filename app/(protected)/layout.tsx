@@ -18,7 +18,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
 
   return (
     <div className="min-h-screen flex flex-col">
-      <Nav currentUser={{ displayName: user.displayName, isAdmin: user.isAdmin }} />
+      <Nav currentUser={{ name: user.name, isAdmin: user.isAdmin }} />
       <main className="flex-1">{children}</main>
     </div>
   );
