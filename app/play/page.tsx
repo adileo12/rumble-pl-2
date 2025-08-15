@@ -20,9 +20,7 @@ export default async function PlayPage() {
 
  const fixtures = await db.fixture.findMany({
   where: {
-    gameweekId: gw.id,
-    // Filter by season through the relation instead of a seasonId column
-    gameweek: { seasonId: season.id },
+    gwId: gw.id,                     // ← use gwId, not gameweekId
   },
   include: {
     homeClub: true,
