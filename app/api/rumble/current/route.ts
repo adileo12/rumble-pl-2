@@ -40,9 +40,9 @@ export async function GET() {
 
   // Current pick (this GW)
   const currentPick = await db.pick.findUnique({
-    where: { userId_gwId: { userId: user.id, gwId: gw.id } },
-    select: { clubId: true },
-  });
+  where: { userId_gwId: { userId: user.id, gwId: gw.id } },
+  select: { clubId: true },
+});
 
   // All used clubs this season EXCEPT current GW pick (so you can change it)
   const allPicks = await db.pick.findMany({
