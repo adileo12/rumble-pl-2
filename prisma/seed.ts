@@ -1,61 +1,89 @@
+// prisma/seed.ts
 import { PrismaClient } from "@prisma/client";
-const db = new PrismaClient();
+const prisma = new PrismaClient();
 
 async function main() {
-  // 1) Season
-  const season = await db.season.upsert({
-    where: { id: "seed-season" }, // fixed id for repeatable runs
+  // 1) Clubs
+  const arsenal = await prisma.club.upsert({
+    where: { shortName: "ARS" },
+    update: {},
+    create: { name: "Arsenal", shortName: "ARS", active: true },
+  });
+
+  const chelsea = await prisma.club.upsert({
+    where: { shortName: "CHE" },
+    update: {},
+    create: { name: "Chelsea", shortName: "CHE", active: true },
+  });
+
+  // 2) Season (set active)
+  const season2025 = await prisma.season.upsert({
+    where: { name: "Premier League 2025" },
     update: { isActive: true },
     create: {
-      id: "seed-season",
-      name: "2025/26",
+      name: "Premier League 2025",
       year: 2025,
       isActive: true,
     },
   });
 
-  // 2) Gameweek (deadline a few hours from now)
-  const gw = await db.gameweek.upsert({
-    where: { id: "seed-gw-1" },
-    update: {},
+  // 3) A FUTURE gameweek so it’s considered “current”
+  //    (Deadline needs to be in the future relative to server time)
+  const deadline = new Date(Date.now() + 1000 * 60 * 60 * 24); // +24h
+  const gw1 = await prisma.gameweek.upsert({
+    where: { // unique(seasonId, number) so compose this manually:
+      // create a fake compound unique via a stable id; we can instead findFirst and then update/create:
+      // Using findFirst approach:
+      // We'll upsert by number+season via a find then create if missing.
+      // BUT Prisma upsert requires a unique field. So we'll do two steps:
+      id: "seed-gw-1" // workaround unique handle for upsert
+    },
+    update: {
+      seasonId: season2025.id,
+      number: 1,
+      deadline,
+      isLocked: false,
+      graded: false
+    },
     create: {
       id: "seed-gw-1",
-      seasonId: season.id,
+      seasonId: season2025.id,
       number: 1,
-      deadline: new Date(Date.now() + 6 * 60 * 60 * 1000),
+      deadline,
       isLocked: false,
-      graded: false,
+      graded: false
     },
   });
 
-  // 3) Clubs
-  const clubA = await db.club.upsert({
-    where: { id: "club-a" },
-    update: {},
-    create: { id: "club-a", name: "Alpha FC", shortName: "ALP", active: true },
-  });
-
-  const clubB = await db.club.upsert({
-    where: { id: "club-b" },
-    update: {},
-    create: { id: "club-b", name: "Bravo United", shortName: "BRV", active: true },
-  });
-
-  // 4) One fixture in that GW (kickoff in ~7 hours)
-  await db.fixture.upsert({
-    where: { id: "seed-fix-1" },
-    update: {},
+  // 4) One upcoming fixture in that GW (kickoff after deadline)
+  const kickoff = new Date(deadline.getTime() + 1000 * 60 * 60); // +1h after deadline
+  await prisma.fixture.upsert({
+    where: { id: "seed-fix-ars-che" },
+    update: {
+      gwId: gw1.id,
+      homeClubId: arsenal.id,
+      awayClubId: chelsea.id,
+      kickoff,
+      status: "SCHEDULED",
+    },
     create: {
-      id: "seed-fix-1",
-      gwId: gw.id,
-      homeClubId: clubA.id,
-      awayClubId: clubB.id,
-      kickoff: new Date(Date.now() + 7 * 60 * 60 * 1000),
+      id: "seed-fix-ars-che",
+      gwId: gw1.id,
+      homeClubId: arsenal.id,
+      awayClubId: chelsea.id,
+      kickoff,
       status: "SCHEDULED",
     },
   });
 
-  console.log("Seed complete 👍");
+  console.log("Seed completed ✅");
 }
 
-main().finally(() => db.$disconnect());
+main()
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });
