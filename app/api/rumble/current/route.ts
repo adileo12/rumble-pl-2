@@ -2,83 +2,122 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { db } from "@/src/lib/db";
-import { computeDeadline, getCurrentSeasonAndGW, last5Form } from "@/src/lib/rumble";
+
+// derive deadline: 30 mins before earliest kickoff of this GW
+function computeDeadline(kickoffs: Date[]) {
+  if (!kickoffs.length) return null;
+  const first = new Date(Math.min(...kickoffs.map(k => k.getTime())));
+  return new Date(first.getTime() - 30 * 60 * 1000);
+}
+
+// last 5 results for a club before a given time (W/D/L)
+async function last5Form(clubId: string, before: Date) {
+  const rows = await db.fixture.findMany({
+    where: {
+      kickoff: { lt: before },
+      OR: [{ homeClubId: clubId }, { awayClubId: clubId }],
+    },
+    orderBy: { kickoff: "desc" },
+    take: 5,
+    select: { homeClubId: true, awayClubId: true, homeGoals: true, awayGoals: true },
+  });
+
+  return rows.map((f) => {
+    const isHome = f.homeClubId === clubId;
+    const gf = isHome ? (f.homeGoals ?? 0) : (f.awayGoals ?? 0);
+    const ga = isHome ? (f.awayGoals ?? 0) : (f.homeGoals ?? 0);
+    if (gf > ga) return "W";
+    if (gf === ga) return "D";
+    return "L";
+  });
+}
 
 export async function GET() {
+  // 0) auth
   const sid = (await cookies()).get("sid")?.value;
   if (!sid) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
 
-  const user = await db.user.findUnique({
-    where: { id: sid },
-    select: { id: true },
-  });
+  const user = await db.user.findUnique({ where: { id: sid }, select: { id: true } });
   if (!user) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
 
-  const { season, gw } = await getCurrentSeasonAndGW();
-  if (!season || !gw) {
-    return NextResponse.json({ ok: true, data: { season: null, gw: null, fixtures: [], clubs: [], deadline: null, pickedClubId: null, usedClubIds: [] } });
+  // 1) active season
+  const season = await db.season.findFirst({ where: { isActive: true } });
+  if (!season) {
+    return NextResponse.json({
+      ok: true,
+      data: { season: null, gw: null, fixtures: [], clubs: [], deadline: null, pickedClubId: null, usedClubIds: [] },
+    });
   }
 
+  // 2) current gameweek (nearest future deadline, else last past)
+  const now = new Date();
+  const future = await db.gameweek.findFirst({
+    where: { seasonId: season.id, deadline: { gte: now } },
+    orderBy: { deadline: "asc" },
+  });
+  const gw =
+    future ??
+    (await db.gameweek.findFirst({
+      where: { seasonId: season.id },
+      orderBy: { deadline: "desc" },
+    }));
+
+  if (!gw) {
+    return NextResponse.json({
+      ok: true,
+      data: { season, gw: null, fixtures: [], clubs: [], deadline: null, pickedClubId: null, usedClubIds: [] },
+    });
+  }
+
+  // 3) fixtures for this GW  **IMPORTANT: use gwId (not gameweekId)**
   const fixtures = await db.fixture.findMany({
     where: { gwId: gw.id },
+    include: { homeClub: true, awayClub: true },
     orderBy: { kickoff: "asc" },
-    select: {
-      id: true, kickoff: true,
-      homeClub: { select: { id: true, name: true, shortName: true } },
-      awayClub: { select: { id: true, name: true, shortName: true } },
-    },
   });
 
+  const deadline = computeDeadline(fixtures.map(f => f.kickoff));
+
+  // 4) clubs (active)
   const clubs = await db.club.findMany({
     where: { active: true },
     orderBy: { name: "asc" },
     select: { id: true, name: true, shortName: true },
   });
 
-  // deadline = 30m before first kickoff (derive from fixtures)
-  const { deadline } = computeDeadline(fixtures.map(f => new Date(f.kickoff)));
-
-  // Current pick (this GW)
+  // 5) your current pick for this GW
   const currentPick = await db.pick.findUnique({
-  where: {
-    userId_seasonId_gwId: {
-      userId: user.id,
-      seasonId: season.id,   // make sure you have season.id available
-      gwId: gw.id,
-    },
-  },
-  select: { clubId: true },
-});
-
-  // All used clubs this season EXCEPT current GW pick (so you can change it)
-  const allPicks = await db.pick.findMany({
-    where: { userId: user.id /* optional: seasonId: season.id */ },
-    select: { clubId: true, gwId: true },
+    where: { userId_gwId: { userId: user.id, gwId: gw.id } },
+    select: { clubId: true },
   });
-  const usedClubIds = new Set(
-    allPicks
-      .filter(p => p.gwId !== gw.id) // exclude current GW (lets you change)
-      .map(p => p.clubId)
+
+  // 6) clubs you’ve already used this season (disable in UI)
+  const used = await db.pick.findMany({
+    where: { userId: user.id, seasonId: season.id },
+    select: { clubId: true },
+  });
+  const usedClubIds = Array.from(new Set(used.map(u => u.clubId)));
+
+  // 7) build fixture rows + last-5 form
+  const cutoff = deadline ?? now;
+  const table = await Promise.all(
+    fixtures.map(async (fx) => ({
+      id: fx.id,
+      kickoff: fx.kickoff.toISOString(),
+      home: {
+        id: fx.homeClub.id,
+        name: fx.homeClub.name,
+        shortName: fx.homeClub.shortName,
+        form: await last5Form(fx.homeClubId, cutoff),
+      },
+      away: {
+        id: fx.awayClub.id,
+        name: fx.awayClub.name,
+        shortName: fx.awayClub.shortName,
+        form: await last5Form(fx.awayClubId, cutoff),
+      },
+    }))
   );
-
-  // Compute form for each club in the fixtures (last 5)
-  const now = new Date();
-  const formsCache = new Map<string, string[]>();
-  for (const f of fixtures) {
-    for (const c of [f.homeClub.id, f.awayClub.id]) {
-      if (!formsCache.has(c)) {
-        const arr = await last5Form(c, now);
-        formsCache.set(c, arr);
-      }
-    }
-  }
-
-  const table = fixtures.map(f => ({
-    id: f.id,
-    kickoff: f.kickoff,
-    home: { ...f.homeClub, form: formsCache.get(f.homeClub.id) ?? [] },
-    away: { ...f.awayClub, form: formsCache.get(f.awayClub.id) ?? [] },
-  }));
 
   return NextResponse.json({
     ok: true,
@@ -89,7 +128,7 @@ export async function GET() {
       clubs,
       deadline: deadline?.toISOString() ?? null,
       pickedClubId: currentPick?.clubId ?? null,
-      usedClubIds: Array.from(usedClubIds),
+      usedClubIds,
     },
   });
 }
