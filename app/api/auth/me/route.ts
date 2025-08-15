@@ -11,7 +11,7 @@ export async function GET() {
 
   const user = await db.user.findUnique({
     where: { id: sid },
-    select: { id: true, displayName: true, isAdmin: true },
+    select: { id: true, name: true, isAdmin: true },
   });
 
   return NextResponse.json({ user: user ?? null });
