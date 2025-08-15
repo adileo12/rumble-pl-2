@@ -12,7 +12,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
 
   const user = await db.user.findUnique({
     where: { id: sid },
-    select: { id: true, displayName: true, isAdmin: true },
+    select: { id: true, name: true, isAdmin: true },
   });
   if (!user) redirect("/login?next=/home");
 
