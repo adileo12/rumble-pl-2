@@ -13,7 +13,7 @@ export async function POST(req: Request) {
 
     const user = await db.user.findUnique({
       where: { secretCode: code },
-      select: { id: true, displayName: true, isAdmin: true },
+      select: { id: true, name: true, isAdmin: true },
     });
     if (!user) {
       return NextResponse.json({ ok: false, error: "Invalid secret code" }, { status: 401 });
