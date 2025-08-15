@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 
 type User = {
   id?: string;
-  displayName: string;
+  name: string;
   isAdmin: boolean;
 };
 
