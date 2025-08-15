@@ -31,7 +31,10 @@ export default async function PlayPage() {
 
   const clubs = await db.club.findMany({ where: { active: true }, orderBy: { name: 'asc' } });
   const used = await clubsYouAlreadyPicked(user.id, season.id);
-  const youPickedThisGW = await db.pick.findUnique({ where: { userId_gameweekId: { userId, gameweekId: gw.id } }, include: { club: true } });
+  const youPickedThisGW = await db.pick.findUnique({
+   where: { userId_gwId: { userId, gwId: gw.id } },
+  include: { club: true },
+  });
 
   return (
     <main className="max-w-4xl mx-auto p-6 space-y-8">
