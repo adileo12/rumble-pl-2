@@ -11,7 +11,7 @@ export async function GET() {
     try {
       user = await db.user.findUnique({
         where: { id: sid },
-        select: { id: true, displayName: true, isAdmin: true },
+        select: { id: true, name: true, isAdmin: true },
       });
     } catch (e: any) {
       return NextResponse.json({ ok: false, sid, dbError: e?.message }, { status: 500 });
