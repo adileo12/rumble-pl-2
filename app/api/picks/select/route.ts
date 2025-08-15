@@ -35,7 +35,7 @@ export async function POST(req: Request) {
     // Upsert pick for this GW (allow change before lock)
     const pick = await db.pick.upsert({
   where: {
-    userId_seasonId_gameweekId: {
+    userId_seasonId_gwId: {
       userId: user.id,
       seasonId: season.id,
       gwId: gw.id,
