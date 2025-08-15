@@ -8,6 +8,9 @@
     "start": "next start",
     "postinstall": "prisma generate"
   },
+  "prisma": {
+    "seed": "ts-node --transpile-only prisma/seed.ts"
+  },
   "dependencies": {
     "@prisma/client": "5.16.1",
     "bcryptjs": "^3.0.2",
