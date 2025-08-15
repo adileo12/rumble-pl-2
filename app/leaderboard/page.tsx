@@ -15,7 +15,7 @@ export default async function Leaderboard() {
         <tbody>
           {rows.map(r => (
             <tr key={r.id}>
-              <td>{r.user.displayName}</td>
+              <td>{r.user.name}</td>
               <td>{r.isAlive ? 'Alive' : 'Eliminated'}</td>
               <td>{r.eliminatedGw ?? '-'}</td>
               <td>{r.jokerLifelinesLeft}</td>
