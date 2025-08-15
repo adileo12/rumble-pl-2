@@ -43,7 +43,7 @@ export async function GET() {
   where: {
     userId_seasonId_gwId: {
       userId: user.id,
-      seasonId: season.id,
+      seasonId: season.id,   // make sure you have season.id available
       gwId: gw.id,
     },
   },
