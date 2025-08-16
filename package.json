@@ -8,7 +8,7 @@
     "start": "next start",
     "postinstall": "prisma generate",
     "seed": "prisma db seed",
-    "create:admin": "tsx scripts/create-admin.ts"
+    "create:admin": "cross-env ts-node --transpile-only scripts/create-admin.ts"
   },
   "prisma": {
     "seed": "ts-node --transpile-only prisma/seed.ts"
