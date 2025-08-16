@@ -1,134 +1,129 @@
-// app/(protected)/rumble/page.tsx
 "use client";
-import { useEffect, useMemo, useState } from "react";
 
-type Club = { id: string; name: string; shortName: string | null };
-type Row = {
-  id: string;
-  kickoff: string;
-  home: Club & { form: string[] };
-  away: Club & { form: string[] };
-};
-type Payload = {
-  ok: boolean;
-  data?: {
-    season: { id: string; name: string; year: number } | null;
-    gw: { id: string; number: number; isLocked: boolean; deadline: string | null } | null;
-    fixtures: Row[];
-    clubs: Club[];
-    deadline: string | null;
-    pickedClubId: string | null;
-    usedClubIds: string[];
-  };
-  error?: string;
-};
+import useSWR, { mutate } from "swr";
+import { useMemo, useState } from "react";
 
-function useCurrent() {
-  const [state, setState] = useState<Payload>({ ok: false });
-  useEffect(() => {
-    fetch("/api/rumble/current")
-      .then(r => r.json())
-      .then(setState)
-      .catch(() => setState({ ok: false, error: "Failed to load" }));
-  }, []);
-  return state;
-}
+const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
-export default function RumblePage() {
-  const res = useCurrent();
-  const data = res.data;
+export default function RumblePlayPage() {
+  const { data: resp, isLoading, error } = useSWR("/api/rumble/current", fetcher, { revalidateOnFocus: false });
+  const data = resp?.data;
   const [selected, setSelected] = useState<string | null>(null);
-  const deadlinePassed = useMemo(() => {
-    if (!data?.deadline) return false;
-    return Date.now() > new Date(data.deadline).getTime();
-  }, [data?.deadline]);
 
-  useEffect(() => {
-    if (data?.pickedClubId) setSelected(data.pickedClubId);
-  }, [data?.pickedClubId]);
+  const deadlineDate: Date | null = useMemo(
+    () => (data?.deadline ? new Date(data.deadline) : null),
+    [data?.deadline]
+  );
+  const deadlinePassed = useMemo(
+    () => (deadlineDate ? Date.now() > deadlineDate.getTime() : false),
+    [deadlineDate]
+  );
 
-  if (!res.ok || !data) {
-    return <div className="p-6">Loading…</div>;
-  }
+  const submitDisabled = !selected || deadlinePassed;
 
-  const used = new Set(data.usedClubIds); // clubs used in other GWs
-  const canInteract = !deadlinePassed;
-
-  async function submit() {
+  async function handleSubmit() {
     if (!selected) return;
     const r = await fetch("/api/rumble/pick", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ clubId: selected }),
     });
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok) {
-      alert(j?.error || "Failed to save");
-      return;
+    if (r.ok) {
+      setSelected(null);
+      await mutate("/api/rumble/current"); // refresh data (pickedClubId, usedClubIds)
+    } else {
+      const j = await r.json().catch(() => ({}));
+      alert(j?.error || "Failed to submit pick");
     }
-    // Refresh state
-    location.reload();
   }
 
+  if (isLoading) return <div className="p-6">Loading…</div>;
+  if (error) return <div className="p-6 text-red-600">Failed: {String(error)}</div>;
+
   return (
-    <div className="mx-auto max-w-5xl p-4 space-y-8">
-      {/* Fixtures table */}
-      <section>
-        <h2 className="text-xl font-semibold mb-3">
-          Gameweek {data.gw?.number ?? "-"} – Upcoming fixtures
+    <div className="p-6 space-y-8">
+      <div>
+        <h2 className="text-2xl font-semibold">
+          {data?.gw ? `Gameweek ${data.gw.number} – Upcoming fixtures` : "Upcoming fixtures"}
         </h2>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm border">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="p-2 border">Fixture</th>
-                <th className="p-2 border">Kickoff</th>
-                <th className="p-2 border">Club 1 form (last 5)</th>
-                <th className="p-2 border">Club 2 form (last 5)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.fixtures.map((f) => (
-                <tr key={f.id} className="odd:bg-white even:bg-gray-50">
-                  <td className="p-2 border">{f.home.name} vs {f.away.name}</td>
-                  <td className="p-2 border">
-                    {new Date(f.kickoff).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}
-                  </td>
-                  <td className="p-2 border">
-                    {f.home.form.length ? f.home.form.join(" ") : "—"}
-                  </td>
-                  <td className="p-2 border">
-                    {f.away.form.length ? f.away.form.join(" ") : "—"}
+        <div className="mt-2 text-sm opacity-70">
+          Deadline (IST):{" "}
+          {data?.deadline
+            ? new Date(data.deadline).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+            : "TBD"}
+          {deadlinePassed && <span className="ml-2 text-red-600 font-medium">(Passed)</span>}
+        </div>
+      </div>
+
+      {/* Fixtures Table */}
+      <div className="overflow-x-auto rounded border">
+        <table className="min-w-full text-left text-sm">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-4 py-3 font-semibold">Fixture</th>
+              <th className="px-4 py-3 font-semibold">Kickoff (IST)</th>
+              <th className="px-4 py-3 font-semibold">Club 1 form (last 5)</th>
+              <th className="px-4 py-3 font-semibold">Club 2 form (last 5)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data?.fixtures?.length
+              ? data.fixtures.map((fx: any) => (
+                  <tr key={fx.id} className="border-t">
+                    <td className="px-4 py-3">
+                      {fx.home.shortName ?? fx.home.name} vs {fx.away.shortName ?? fx.away.name}
+                    </td>
+                    <td className="px-4 py-3">
+                      {fx.kickoff
+                        ? new Date(fx.kickoff).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+                        : "TBD"}
+                    </td>
+                    <td className="px-4 py-3 font-mono">
+                      {fx.home.form?.length ? fx.home.form.join("") : "—"}
+                    </td>
+                    <td className="px-4 py-3 font-mono">
+                      {fx.away.form?.length ? fx.away.form.join("") : "—"}
+                    </td>
+                  </tr>
+                ))
+              : (
+                <tr>
+                  <td className="px-4 py-6 text-center text-gray-500" colSpan={4}>
+                    No fixtures yet
                   </td>
                 </tr>
-              ))}
-              {!data.fixtures.length && (
-                <tr><td className="p-3 text-center" colSpan={4}>No fixtures yet</td></tr>
               )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+          </tbody>
+        </table>
+      </div>
 
-      {/* Club picker */}
-      <section>
-        <h2 className="text-xl font-semibold mb-3">Pick your club</h2>
-        <div className="flex flex-wrap gap-2">
-          {data.clubs.map((c) => {
-            const pickedBefore = used.has(c.id);
-            const active = selected === c.id;
-            const disabled = !canInteract || pickedBefore;
+      {/* Club Picker */}
+      <div>
+        <h3 className="text-2xl font-semibold mb-3">Pick your club</h3>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
+          {(data?.clubs ?? []).map((c: any) => {
+            const used = (data?.usedClubIds ?? []).includes(c.id);
+            const isCurrentPick = data?.pickedClubId === c.id;
+            const disabled = deadlinePassed || used || isCurrentPick;
+
             return (
               <button
                 key={c.id}
-                onClick={() => !disabled && setSelected(c.id)}
-                className={[
-                  "px-3 py-2 rounded border text-sm",
-                  active ? "bg-black text-white" : "bg-white",
-                  disabled ? "opacity-40 cursor-not-allowed" : "hover:bg-gray-100",
-                ].join(" ")}
                 disabled={disabled}
-                title={pickedBefore ? "Already used this club in a previous week" : ""}
+                onClick={() => setSelected(c.id)}
+                className={[
+                  "px-4 py-2 rounded border",
+                  disabled ? "opacity-40 cursor-not-allowed" : "hover:bg-gray-50",
+                  selected === c.id ? "ring-2 ring-blue-500" : "",
+                ].join(" ")}
+                title={
+                  used
+                    ? "Already used in a previous GW"
+                    : isCurrentPick
+                    ? "You have already picked this club for this GW"
+                    : ""
+                }
               >
                 {c.name}
               </button>
@@ -136,36 +131,26 @@ export default function RumblePage() {
           })}
         </div>
 
-        <div className="mt-4 flex items-center gap-3">
+        <div className="mt-4 flex items-center gap-4">
           <button
-            onClick={submit}
-            disabled={!canInteract || !selected}
+            onClick={handleSubmit}
+            disabled={submitDisabled}
             className={[
-              "px-4 py-2 rounded text-sm",
-              !canInteract || !selected
-                ? "bg-gray-300 text-gray-600 cursor-not-allowed"
-                : "bg-black text-white hover:opacity-90",
+              "px-4 py-2 rounded",
+              submitDisabled ? "bg-gray-300 text-gray-600 cursor-not-allowed" : "bg-black text-white",
             ].join(" ")}
           >
             Submit
           </button>
 
           <div className="text-sm opacity-70">
-            Deadline:&nbsp;
-            {data.deadline
+            Deadline:{" "}
+            {data?.deadline
               ? new Date(data.deadline).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
               : "TBD"}
-            {deadlinePassed && <span className="ml-2 text-red-600 font-medium">(Passed)</span>}
           </div>
         </div>
-
-        {!!data.pickedClubId && (
-          <div className="mt-2 text-xs opacity-70">
-            Current selection: {data.clubs.find(c => c.id === data.pickedClubId)?.name ?? "—"}
-            {canInteract ? " (you can change before the deadline)" : " (locked)"}
-          </div>
-        )}
-      </section>
+      </div>
     </div>
   );
 }
