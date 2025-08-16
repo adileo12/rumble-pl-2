@@ -19,10 +19,25 @@ export default function Admin() {
   return (
     <main>
       <h2>Admin</h2>
-      <button onClick={() => call("/api/admin/seed")}>Seed DB (Clubs + Season)</button>
-      <button style={{ marginLeft: 12 }} onClick={() => call("/api/fixtures/sync")}>
-        Sync Fixtures (FPL)
-      </button>
+     <button
+  className="px-4 py-2 rounded bg-slate-800 text-white"
+  onClick={async () => {
+    const r = await fetch("/api/admin/sync-clubs", { method: "POST" });
+    const j = await r.json(); alert(JSON.stringify(j, null, 2));
+  }}
+>
+  Sync Clubs
+</button>
+
+<button
+  className="ml-3 px-4 py-2 rounded bg-slate-800 text-white"
+  onClick={async () => {
+    const r = await fetch("/api/admin/sync-fixtures", { method: "POST" });
+    const j = await r.json(); alert(JSON.stringify(j, null, 2));
+  }}
+>
+  Sync Fixtures
+</button>
       <p style={{ marginTop: 12 }}>1) Seed → 2) Sync Fixtures → check /api/status.</p>
       <pre style={{ whiteSpace: "pre-wrap", background: "#f6f6f6", padding: 8 }}>{msg}</pre>
     </main>
