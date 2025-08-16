@@ -14,28 +14,35 @@ export async function POST(req: Request) {
   const { season, gw } = await getCurrentSeasonAndGW();
   if (!season || !gw) return NextResponse.json({ ok: false, error: "No active gameweek" }, { status: 400 });
 
-  // Deadline check
-  const fixtures = await db.fixture.findMany({
-    where: { gwId: gw.id },
+  // Enforce deadline on the server
+  const kicks = await db.fixture.findMany({
+    where: { gwId: gw.id, kickoff: { not: null } },
     select: { kickoff: true },
-    orderBy: { kickoff: "asc" },
-    take: 1,
   });
-  const { deadline } = computeDeadline(fixtures.map(f => new Date(f.kickoff)));
-  if (!deadline) return NextResponse.json({ ok: false, error: "No fixtures in this GW" }, { status: 400 });
-  if (new Date() > deadline) return NextResponse.json({ ok: false, error: "Deadline passed" }, { status: 400 });
-
-  // Enforce “one club ever” rule (excluding current GW’s existing pick so user can change it)
-  const existing = await db.pick.findMany({
-    where: { userId: sid /* optional: seasonId: season.id */ },
-    select: { clubId: true, gwId: true },
-  });
-  const pickedInOtherGW = existing.some(p => p.clubId === clubId && p.gwId !== gw.id);
-  if (pickedInOtherGW) {
-    return NextResponse.json({ ok: false, error: "You have already used this club in a previous week." }, { status: 400 });
+  const { deadline } = computeDeadline(kicks.map((k) => k.kickoff as Date));
+  const effectiveDeadline = gw.deadline ?? deadline ?? null;
+  if (effectiveDeadline && Date.now() > effectiveDeadline.getTime()) {
+    return NextResponse.json({ ok: false, error: "Deadline has passed for this gameweek" }, { status: 403 });
   }
 
-  // Upsert pick for this GW
+  // Optional: prevent reusing a club used in any earlier GW this season
+  const alreadyUsed = await db.pick.findFirst({
+    where: {
+      userId: sid,
+      seasonId: season.id,
+      clubId,
+      gw: { number: { lt: gw.number } }, // relation filter to earlier GWs
+    },
+    select: { id: true },
+  });
+  if (alreadyUsed) {
+    return NextResponse.json(
+      { ok: false, error: "You have already used this club in a previous gameweek" },
+      { status: 400 }
+    );
+  }
+
+  // Upsert pick for this GW (allows edits until deadline)
   await db.pick.upsert({
     where: { userId_gwId: { userId: sid, gwId: gw.id } },
     update: { clubId },
