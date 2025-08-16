@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { db } from "@/src/lib/db";
-import { computeDeadline, getCurrentSeasonAndGW } from "@/src/lib/rumble";
+import { getCurrentSeasonAndGW } from "@/src/lib/rumble"; // note: no computeDeadline import
 
 export async function GET() {
   const sid = (await cookies()).get("sid")?.value ?? null;
@@ -44,10 +44,15 @@ export async function GET() {
     },
   });
 
-  // Compute deadline (prefer GW.deadline if set)
-  const { deadline: derived } = computeDeadline(
-    fixtures.map((f) => f.kickoff as Date | null)
-  );
+  // Compute derived deadline locally: 30m before earliest kickoff
+  const ks = fixtures
+    .map((f) => f.kickoff)
+    .filter((d): d is Date => d instanceof Date);
+  const derived =
+    ks.length > 0
+      ? new Date(Math.min(...ks.map((d) => d.getTime())) - 30 * 60 * 1000)
+      : null;
+
   const effectiveDeadline = gw.deadline ?? derived ?? null;
   const deadlinePassed =
     effectiveDeadline ? Date.now() > effectiveDeadline.getTime() : false;
@@ -61,12 +66,12 @@ export async function GET() {
   const clubMap = Object.fromEntries(clubs.map((c) => [c.id, c.name]));
 
   // User pick for this GW
-  const currentPick =
-    sid &&
-    (await db.pick.findUnique({
-      where: { userId_gwId: { userId: sid, gwId: gw.id } },
-      select: { clubId: true },
-    }));
+  const currentPick: { clubId: string } | null = sid
+    ? await db.pick.findUnique({
+        where: { userId_gwId: { userId: sid, gwId: gw.id } },
+        select: { clubId: true },
+      })
+    : null;
 
   // All user picks this season (for visibility)
   const seasonPicks =
@@ -92,15 +97,11 @@ export async function GET() {
       select: { clubId: true },
     });
     usedClubIds = Array.from(new Set(pastPicks.map((p) => p.clubId)));
-
-    if (deadlinePassed && currentPick?.clubId) {
-      if (!usedClubIds.includes(currentPick.clubId)) {
-        usedClubIds.push(currentPick.clubId);
-      }
+    if (deadlinePassed && currentPick?.clubId && !usedClubIds.includes(currentPick.clubId)) {
+      usedClubIds.push(currentPick.clubId);
     }
   }
 
-  // Build a simple fixture table with names (no form here—/rumble/current has that)
   const fixtureRows = fixtures.map((fx) => ({
     id: fx.id,
     kickoffIso: fx.kickoff ? fx.kickoff.toISOString() : null,
@@ -131,14 +132,9 @@ export async function GET() {
     },
     debug: {
       nowIso: now.toISOString(),
-      earliestKickoffIso:
-        fixtures.length && fixtures[0].kickoff
-          ? fixtures[0].kickoff.toISOString()
-          : null, // fixtures are ordered asc
+      earliestKickoffIso: ks.length ? new Date(Math.min(...ks.map((d) => d.getTime()))).toISOString() : null,
       derivedDeadlineIso: derived ? derived.toISOString() : null,
-      effectiveDeadlineIso: effectiveDeadline
-        ? effectiveDeadline.toISOString()
-        : null,
+      effectiveDeadlineIso: effectiveDeadline ? effectiveDeadline.toISOString() : null,
       deadlinePassed,
       totalFixturesThisGW: fixtures.length,
       seasonPickSummary: seasonPicks
