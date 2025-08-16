@@ -3,80 +3,121 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { db } from "@/src/lib/db";
 
-// derive deadline: 30 mins before earliest kickoff of this GW
-function computeDeadline(kickoffs: Date[]) {
-  if (!kickoffs.length) return null;
-  const first = new Date(Math.min(...kickoffs.map(k => k.getTime())));
-  return new Date(first.getTime() - 30 * 60 * 1000);
+// ---------- helpers ----------
+function computeDeadline(kickoffs: (Date | null)[]) {
+  const ks = kickoffs.filter(Boolean) as Date[];
+  if (!ks.length) return null;
+  const earliest = new Date(Math.min(...ks.map((d) => d.getTime())));
+  return new Date(earliest.getTime() - 30 * 60 * 1000); // T-30m
 }
 
-// last 5 results for a club before a given time (W/D/L)
 async function last5Form(clubId: string, before: Date) {
   const rows = await db.fixture.findMany({
     where: {
       kickoff: { lt: before },
+      status: "FT",
       OR: [{ homeClubId: clubId }, { awayClubId: clubId }],
     },
     orderBy: { kickoff: "desc" },
     take: 5,
-    select: { homeClubId: true, awayClubId: true, homeGoals: true, awayGoals: true },
+    select: {
+      homeClubId: true,
+      awayClubId: true,
+      homeGoals: true,
+      awayGoals: true,
+    },
   });
 
-  return rows.map((f) => {
-    const isHome = f.homeClubId === clubId;
-    const gf = isHome ? (f.homeGoals ?? 0) : (f.awayGoals ?? 0);
-    const ga = isHome ? (f.awayGoals ?? 0) : (f.homeGoals ?? 0);
-    if (gf > ga) return "W";
-    if (gf === ga) return "D";
-    return "L";
-  });
+  // newest->oldest → convert to oldest->newest for display
+  return rows
+    .map((r) => {
+      const isHome = r.homeClubId === clubId;
+      const gf = isHome ? (r.homeGoals ?? 0) : (r.awayGoals ?? 0);
+      const ga = isHome ? (r.awayGoals ?? 0) : (r.homeGoals ?? 0);
+      return gf > ga ? "W" : gf === ga ? "D" : "L";
+    })
+    .reverse();
 }
 
+// ---------- route ----------
 export async function GET() {
-  // 0) auth
-  const sid = (await cookies()).get("sid")?.value;
-  if (!sid) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-
-  const user = await db.user.findUnique({ where: { id: sid }, select: { id: true } });
-  if (!user) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  const sid = (await cookies()).get("sid")?.value ?? null;
 
   // 1) active season
-  const season = await db.season.findFirst({ where: { isActive: true } });
+  const season = await db.season.findFirst({
+    where: { isActive: true },
+    select: { id: true, name: true, year: true },
+  });
   if (!season) {
     return NextResponse.json({
       ok: true,
-      data: { season: null, gw: null, fixtures: [], clubs: [], deadline: null, pickedClubId: null, usedClubIds: [] },
+      data: {
+        season: null,
+        gw: null,
+        fixtures: [] as any[],
+        clubs: [] as any[],
+        deadline: null as string | null,
+        pickedClubId: null as string | null,
+        usedClubIds: [] as string[],
+      },
     });
   }
 
-  // 2) current gameweek (nearest future deadline, else last past)
+  // 2) current gameweek: nearest future deadline, else most recent past
   const now = new Date();
-  const future = await db.gameweek.findFirst({
-    where: { seasonId: season.id, deadline: { gte: now } },
-    orderBy: { deadline: "asc" },
-  });
-  const gw =
-    future ??
+  let gw =
     (await db.gameweek.findFirst({
-      where: { seasonId: season.id },
+      where: { seasonId: season.id, deadline: { gte: now } },
+      orderBy: { deadline: "asc" },
+      select: {
+        id: true,
+        number: true,
+        isLocked: true,
+        deadline: true,
+      },
+    })) ??
+    (await db.gameweek.findFirst({
+      where: { seasonId: season.id, deadline: { lt: now } },
       orderBy: { deadline: "desc" },
+      select: {
+        id: true,
+        number: true,
+        isLocked: true,
+        deadline: true,
+      },
     }));
 
   if (!gw) {
     return NextResponse.json({
       ok: true,
-      data: { season, gw: null, fixtures: [], clubs: [], deadline: null, pickedClubId: null, usedClubIds: [] },
+      data: {
+        season,
+        gw: null,
+        fixtures: [] as any[],
+        clubs: [] as any[],
+        deadline: null as string | null,
+        pickedClubId: null as string | null,
+        usedClubIds: [] as string[],
+      },
     });
   }
 
-  // 3) fixtures for this GW  **IMPORTANT: use gwId (not gameweekId)**
+  // 3) fixtures for this GW
   const fixtures = await db.fixture.findMany({
     where: { gwId: gw.id },
-    include: { homeClub: true, awayClub: true },
     orderBy: { kickoff: "asc" },
+    select: {
+      id: true,
+      kickoff: true,
+      status: true,
+      homeClubId: true,
+      awayClubId: true,
+    },
   });
 
-  const deadline = computeDeadline(fixtures.map(f => f.kickoff));
+  // deadline (trust GW.deadline if present; else derive)
+  const derived = computeDeadline(fixtures.map((f) => f.kickoff));
+  const deadline = gw.deadline ?? derived;
 
   // 4) clubs (active)
   const clubs = await db.club.findMany({
@@ -85,48 +126,75 @@ export async function GET() {
     select: { id: true, name: true, shortName: true },
   });
 
-  // 5) your current pick for this GW
-  const currentPick = await db.pick.findUnique({
-    where: { userId_gwId: { userId: user.id, gwId: gw.id } },
-    select: { clubId: true },
-  });
+  // 5) current pick (for UX hint)
+  const currentPick =
+    sid &&
+    (await db.pick.findUnique({
+      where: { userId_gwId: { userId: sid, gwId: gw.id } },
+      select: { clubId: true },
+    }));
 
-  // 6) clubs you’ve already used this season (disable in UI)
-  const used = await db.pick.findMany({
-    where: { userId: user.id, seasonId: season.id },
-    select: { clubId: true },
-  });
-  const usedClubIds = Array.from(new Set(used.map(u => u.clubId)));
+  // 6) clubs you used earlier this season (server-enforced carry-forward)
+  let usedClubIds: string[] = [];
+  if (sid) {
+    // we only want picks from earlier GWs
+    const past = await db.pick.findMany({
+      where: {
+        userId: sid,
+        seasonId: season.id,
+        gw: { number: { lt: gw.number } }, // relation filter
+      },
+      select: { clubId: true },
+    });
+    usedClubIds = Array.from(new Set(past.map((p) => p.clubId)));
 
-  // 7) build fixture rows + last-5 form
-  const cutoff = deadline ?? now;
+    // If deadline passed, also lock the current GW pick into the used set
+    if (deadline && Date.now() > deadline.getTime() && currentPick?.clubId) {
+      if (!usedClubIds.includes(currentPick.clubId)) usedClubIds.push(currentPick.clubId);
+    }
+  }
+
+  // 7) last-5 form table (cutoff: up to "now" if pre-deadline, else up to deadline)
+  const cutoff =
+    deadline && Date.now() > deadline.getTime() ? deadline : new Date();
+
+  const clubById = new Map(clubs.map((c) => [c.id, c]));
   const table = await Promise.all(
-    fixtures.map(async (fx) => ({
-      id: fx.id,
-      kickoff: fx.kickoff.toISOString(),
-      home: {
-        id: fx.homeClub.id,
-        name: fx.homeClub.name,
-        shortName: fx.homeClub.shortName,
-        form: await last5Form(fx.homeClubId, cutoff),
-      },
-      away: {
-        id: fx.awayClub.id,
-        name: fx.awayClub.name,
-        shortName: fx.awayClub.shortName,
-        form: await last5Form(fx.awayClubId, cutoff),
-      },
-    }))
+    fixtures.map(async (fx) => {
+      const home = clubById.get(fx.homeClubId)!;
+      const away = clubById.get(fx.awayClubId)!;
+      return {
+        id: fx.id,
+        kickoff: fx.kickoff?.toISOString() ?? "",
+        home: {
+          id: home.id,
+          name: home.name,
+          shortName: home.shortName,
+          form: await last5Form(fx.homeClubId, cutoff),
+        },
+        away: {
+          id: away.id,
+          name: away.name,
+          shortName: away.shortName,
+          form: await last5Form(fx.awayClubId, cutoff),
+        },
+      };
+    })
   );
 
   return NextResponse.json({
     ok: true,
     data: {
-      season: { id: season.id, name: season.name, year: season.year },
-      gw: { id: gw.id, number: gw.number, isLocked: gw.isLocked, deadline: deadline?.toISOString() ?? null },
+      season,
+      gw: {
+        id: gw.id,
+        number: gw.number,
+        isLocked: Boolean(deadline && Date.now() > deadline.getTime()),
+        deadline: deadline ? deadline.toISOString() : null,
+      },
       fixtures: table,
       clubs,
-      deadline: deadline?.toISOString() ?? null,
+      deadline: deadline ? deadline.toISOString() : null,
       pickedClubId: currentPick?.clubId ?? null,
       usedClubIds,
     },
