@@ -126,18 +126,18 @@ export async function GET() {
     select: { id: true, name: true, shortName: true },
   });
 
-  // 5) current pick (for UX hint)
-  const currentPick =
-    sid &&
-    (await db.pick.findUnique({
-      where: { userId_gwId: { userId: sid, gwId: gw.id } },
-      select: { clubId: true },
-    }));
+  // 5) current pick (for UX hint) — ensure object | null (not a string union)
+  const currentPick: { clubId: string } | null = sid
+    ? await db.pick.findUnique({
+        where: { userId_gwId: { userId: sid, gwId: gw.id } },
+        select: { clubId: true },
+      })
+    : null;
 
   // 6) clubs you used earlier this season (server-enforced carry-forward)
   let usedClubIds: string[] = [];
   if (sid) {
-    // we only want picks from earlier GWs
+    // picks from earlier GWs
     const past = await db.pick.findMany({
       where: {
         userId: sid,
@@ -149,14 +149,13 @@ export async function GET() {
     usedClubIds = Array.from(new Set(past.map((p) => p.clubId)));
 
     // If deadline passed, also lock the current GW pick into the used set
-    if (deadline && Date.now() > deadline.getTime() && currentPick?.clubId) {
+    if (deadline && Date.now() > deadline.getTime() && currentPick && currentPick.clubId) {
       if (!usedClubIds.includes(currentPick.clubId)) usedClubIds.push(currentPick.clubId);
     }
   }
 
   // 7) last-5 form table (cutoff: up to "now" if pre-deadline, else up to deadline)
-  const cutoff =
-    deadline && Date.now() > deadline.getTime() ? deadline : new Date();
+  const cutoff = deadline && Date.now() > deadline.getTime() ? deadline : new Date();
 
   const clubById = new Map(clubs.map((c) => [c.id, c]));
   const table = await Promise.all(
