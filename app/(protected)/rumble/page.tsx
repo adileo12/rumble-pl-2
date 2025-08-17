@@ -1,14 +1,34 @@
 "use client";
 
-import useSWR, { mutate } from "swr";
-import { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
+type ApiResp = { ok: boolean; data: any };
 
 export default function RumblePlayPage() {
-  const { data: resp, isLoading, error } = useSWR("/api/rumble/current", fetcher, { revalidateOnFocus: false });
-  const data = resp?.data;
+  const [resp, setResp] = useState<ApiResp | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+
+  async function load() {
+    try {
+      setLoading(true);
+      const r = await fetch("/api/rumble/current", { cache: "no-store" });
+      const j = (await r.json()) as ApiResp;
+      setResp(j);
+      setErr(null);
+    } catch (e: any) {
+      setErr(String(e?.message || e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const data = resp?.data;
 
   const deadlineDate: Date | null = useMemo(
     () => (data?.deadline ? new Date(data.deadline) : null),
@@ -30,15 +50,15 @@ export default function RumblePlayPage() {
     });
     if (r.ok) {
       setSelected(null);
-      await mutate("/api/rumble/current"); // refresh data (pickedClubId, usedClubIds)
+      await load(); // refresh data
     } else {
       const j = await r.json().catch(() => ({}));
       alert(j?.error || "Failed to submit pick");
     }
   }
 
-  if (isLoading) return <div className="p-6">Loading…</div>;
-  if (error) return <div className="p-6 text-red-600">Failed: {String(error)}</div>;
+  if (loading) return <div className="p-6">Loading…</div>;
+  if (err) return <div className="p-6 text-red-600">Failed: {String(err)}</div>;
 
   return (
     <div className="p-6 space-y-8">
@@ -67,32 +87,32 @@ export default function RumblePlayPage() {
             </tr>
           </thead>
           <tbody>
-            {data?.fixtures?.length
-              ? data.fixtures.map((fx: any) => (
-                  <tr key={fx.id} className="border-t">
-                    <td className="px-4 py-3">
-                      {fx.home.shortName ?? fx.home.name} vs {fx.away.shortName ?? fx.away.name}
-                    </td>
-                    <td className="px-4 py-3">
-                      {fx.kickoff
-                        ? new Date(fx.kickoff).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
-                        : "TBD"}
-                    </td>
-                    <td className="px-4 py-3 font-mono">
-                      {fx.home.form?.length ? fx.home.form.join("") : "—"}
-                    </td>
-                    <td className="px-4 py-3 font-mono">
-                      {fx.away.form?.length ? fx.away.form.join("") : "—"}
-                    </td>
-                  </tr>
-                ))
-              : (
-                <tr>
-                  <td className="px-4 py-6 text-center text-gray-500" colSpan={4}>
-                    No fixtures yet
+            {data?.fixtures?.length ? (
+              data.fixtures.map((fx: any) => (
+                <tr key={fx.id} className="border-t">
+                  <td className="px-4 py-3">
+                    {fx.home.shortName ?? fx.home.name} vs {fx.away.shortName ?? fx.away.name}
+                  </td>
+                  <td className="px-4 py-3">
+                    {fx.kickoff
+                      ? new Date(fx.kickoff).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+                      : "TBD"}
+                  </td>
+                  <td className="px-4 py-3 font-mono">
+                    {fx.home.form?.length ? fx.home.form.join("") : "—"}
+                  </td>
+                  <td className="px-4 py-3 font-mono">
+                    {fx.away.form?.length ? fx.away.form.join("") : "—"}
                   </td>
                 </tr>
-              )}
+              ))
+            ) : (
+              <tr>
+                <td className="px-4 py-6 text-center text-gray-500" colSpan={4}>
+                  No fixtures yet
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -106,7 +126,6 @@ export default function RumblePlayPage() {
             const used = (data?.usedClubIds ?? []).includes(c.id);
             const isCurrentPick = data?.pickedClubId === c.id;
             const disabled = deadlinePassed || used || isCurrentPick;
-
             return (
               <button
                 key={c.id}
