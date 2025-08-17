@@ -19,40 +19,44 @@ type FplFixture = {
 
 export async function POST() {
   const season = await db.season.findFirst({ where: { isActive: true } });
-  if (!season) return NextResponse.json({ ok: false, error: "No active season" }, { status: 400 });
+  if (!season) {
+    return NextResponse.json({ ok: false, error: "No active season" }, { status: 400 });
+  }
 
+  // FPL bootstrap (events + teams)
   const boot = await fetch("https://fantasy.premierleague.com/api/bootstrap-static/");
-  if (!boot.ok) return NextResponse.json({ ok: false, error: "FPL bootstrap fetch failed" }, { status: 502 });
+  if (!boot.ok) {
+    return NextResponse.json({ ok: false, error: "FPL bootstrap fetch failed" }, { status: 502 });
+  }
   const bootstrap = (await boot.json()) as FplBootstrap;
 
+  // FPL fixtures
   const fxRes = await fetch("https://fantasy.premierleague.com/api/fixtures/");
-  if (!fxRes.ok) return NextResponse.json({ ok: false, error: "FPL fixtures fetch failed" }, { status: 502 });
+  if (!fxRes.ok) {
+    return NextResponse.json({ ok: false, error: "FPL fixtures fetch failed" }, { status: 502 });
+  }
   const fplFixtures = (await fxRes.json()) as FplFixture[];
 
-  // Build team id -> clubId map
-  const clubs = await db.club.findMany({ select: { id: true, name: true, shortName: true } });
-  const clubByShort = new Map(clubs.map(c => [c.shortName, c]));
-  const shortByFplId = new Map(bootstrap.teams.map(t => [t.id, t.short_name]));
+  // Map FPL team -> our clubId (via short_name)
+  const clubs = await db.club.findMany({ select: { id: true, shortName: true } });
+  const clubByShort = new Map(clubs.map((c) => [c.shortName, c.id]));
+  const shortByFplId = new Map(bootstrap.teams.map((t) => [t.id, t.short_name]));
 
   const clubIdByFplId = new Map<number, string>();
   for (const t of bootstrap.teams) {
-    const short = t.short_name;
-    const found = clubByShort.get(short);
-    if (found) clubIdByFplId.set(t.id, found.id);
+    const clubId = clubByShort.get(t.short_name);
+    if (clubId) clubIdByFplId.set(t.id, clubId);
   }
 
-  // Upsert gameweeks
+  // Upsert Gameweeks from FPL event deadlines
   for (const ev of bootstrap.events) {
     if (!ev.deadline_time) continue;
+    const deadline = new Date(ev.deadline_time);
     const existing = await db.gameweek.findFirst({
       where: { seasonId: season.id, number: ev.id },
     });
-    const deadline = new Date(ev.deadline_time);
     if (existing) {
-      await db.gameweek.update({
-        where: { id: existing.id },
-        data: { deadline },
-      });
+      await db.gameweek.update({ where: { id: existing.id }, data: { deadline } });
     } else {
       await db.gameweek.create({
         data: { seasonId: season.id, number: ev.id, deadline },
@@ -60,31 +64,34 @@ export async function POST() {
     }
   }
 
-  // Upsert fixtures
+  // Upsert Fixtures
   let upserted = 0;
   for (const fx of fplFixtures) {
-    if (!fx.event) continue; // ignore cup/unknown
+    if (!fx.event) continue; // skip non-league/unknown
     const homeClubId = clubIdByFplId.get(fx.team_h);
     const awayClubId = clubIdByFplId.get(fx.team_a);
     if (!homeClubId || !awayClubId) continue;
 
     const gw = await db.gameweek.findFirst({
       where: { seasonId: season.id, number: fx.event },
+      select: { id: true },
     });
     if (!gw) continue;
 
     const kickoff = fx.kickoff_time ? new Date(fx.kickoff_time) : null;
     const status = fx.finished ? "FT" : "NS";
 
-    // find existing by (gw, home, away, kickoff)
-    const existing = await db.fixture.findFirst({
-      where: { gwId: gw.id, homeClubId, awayClubId, kickoff },
-    });
+    // ✅ Build the WHERE object dynamically so we don't pass a null Date
+    const where: any = { gwId: gw.id, homeClubId, awayClubId };
+    if (kickoff) where.kickoff = kickoff;
+
+    const existing = await db.fixture.findFirst({ where });
 
     if (existing) {
       await db.fixture.update({
         where: { id: existing.id },
         data: {
+          kickoff,               // keep it fresh in case FPL moves times
           status,
           homeGoals: fx.team_h_score,
           awayGoals: fx.team_a_score,
@@ -106,5 +113,9 @@ export async function POST() {
     upserted++;
   }
 
-  return NextResponse.json({ ok: true, gameweeks: bootstrap.events.length, fixtures: upserted });
+  return NextResponse.json({
+    ok: true,
+    message: "Synced fixtures and gameweeks from FPL",
+    fixtures: upserted,
+  });
 }
