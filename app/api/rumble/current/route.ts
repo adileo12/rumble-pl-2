@@ -117,7 +117,7 @@ export async function GET() {
 
   // deadline (trust GW.deadline if present; else derive)
   const derived = computeDeadline(fixtures.map((f) => f.kickoff));
-  const deadline = gw.deadline ?? derived;
+const deadline = derived;
 
   // 4) clubs (active)
   const clubs = await db.club.findMany({
