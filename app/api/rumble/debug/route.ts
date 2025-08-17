@@ -53,7 +53,7 @@ export async function GET() {
       ? new Date(Math.min(...ks.map((d) => d.getTime())) - 30 * 60 * 1000)
       : null;
 
-  const effectiveDeadline = gw.deadline ?? derived ?? null;
+  const effectiveDeadline = derived ?? null;
   const deadlinePassed =
     effectiveDeadline ? Date.now() > effectiveDeadline.getTime() : false;
 
