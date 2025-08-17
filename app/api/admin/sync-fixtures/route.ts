@@ -25,22 +25,17 @@ export async function POST() {
 
   // FPL bootstrap (events + teams)
   const boot = await fetch("https://fantasy.premierleague.com/api/bootstrap-static/");
-  if (!boot.ok) {
-    return NextResponse.json({ ok: false, error: "FPL bootstrap fetch failed" }, { status: 502 });
-  }
+  if (!boot.ok) return NextResponse.json({ ok: false, error: "FPL bootstrap fetch failed" }, { status: 502 });
   const bootstrap = (await boot.json()) as FplBootstrap;
 
   // FPL fixtures
   const fxRes = await fetch("https://fantasy.premierleague.com/api/fixtures/");
-  if (!fxRes.ok) {
-    return NextResponse.json({ ok: false, error: "FPL fixtures fetch failed" }, { status: 502 });
-  }
+  if (!fxRes.ok) return NextResponse.json({ ok: false, error: "FPL fixtures fetch failed" }, { status: 502 });
   const fplFixtures = (await fxRes.json()) as FplFixture[];
 
   // Map FPL team -> our clubId (via short_name)
   const clubs = await db.club.findMany({ select: { id: true, shortName: true } });
   const clubByShort = new Map(clubs.map((c) => [c.shortName, c.id]));
-  const shortByFplId = new Map(bootstrap.teams.map((t) => [t.id, t.short_name]));
 
   const clubIdByFplId = new Map<number, string>();
   for (const t of bootstrap.teams) {
@@ -72,30 +67,35 @@ export async function POST() {
     const awayClubId = clubIdByFplId.get(fx.team_a);
     if (!homeClubId || !awayClubId) continue;
 
+    // ⛔ kickoff is required by Prisma schema → skip if FPL hasn't set it yet
+    if (!fx.kickoff_time) continue;
+    const kickoff = new Date(fx.kickoff_time);
+
     const gw = await db.gameweek.findFirst({
       where: { seasonId: season.id, number: fx.event },
       select: { id: true },
     });
     if (!gw) continue;
 
-    const kickoff = fx.kickoff_time ? new Date(fx.kickoff_time) : null;
     const status = fx.finished ? "FT" : "NS";
 
-    // ✅ Build the WHERE object dynamically so we don't pass a null Date
-    const where: any = { gwId: gw.id, homeClubId, awayClubId };
-    if (kickoff) where.kickoff = kickoff;
+    // Build WHERE without ever passing nulls
+    const where: any = { gwId: gw.id, homeClubId, awayClubId, kickoff };
 
     const existing = await db.fixture.findFirst({ where });
 
     if (existing) {
+      const data: any = {
+        status,
+        homeGoals: fx.team_h_score,
+        awayGoals: fx.team_a_score,
+      };
+      // kickoff exists (non-null), include it to keep times fresh if FPL tweaks them
+      data.kickoff = kickoff;
+
       await db.fixture.update({
         where: { id: existing.id },
-        data: {
-          kickoff,               // keep it fresh in case FPL moves times
-          status,
-          homeGoals: fx.team_h_score,
-          awayGoals: fx.team_a_score,
-        },
+        data,
       });
     } else {
       await db.fixture.create({
@@ -103,7 +103,7 @@ export async function POST() {
           gwId: gw.id,
           homeClubId,
           awayClubId,
-          kickoff,
+          kickoff, // guaranteed non-null here
           status,
           homeGoals: fx.team_h_score,
           awayGoals: fx.team_a_score,
