@@ -28,8 +28,8 @@ export async function POST(req: Request) {
   });
 
   // computeDeadline accepts (Date | null)[] and filters internally
-  const { deadline } = computeDeadline(kicks.map(k => k.kickoff));
-  const effectiveDeadline = gw.deadline ?? deadline ?? null;
+  const { deadline } = computeDeadline(kicks.map((k) => k.kickoff));
+const effectiveDeadline = deadline ?? null; // our rule: 30m before first kickoff
 
   if (effectiveDeadline && Date.now() > effectiveDeadline.getTime()) {
     return NextResponse.json(
