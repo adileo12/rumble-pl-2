@@ -62,7 +62,7 @@ export default function RumblePlayPage() {
   if (err) return <div className="p-6 text-red-600">Failed: {String(err)}</div>;
 
   return (
-    <div className="p-6 space-y-8">
+    <div className="p-6 space-y-6">
       <div>
         <h2 className="text-2xl font-semibold">
           {data?.gw ? `Gameweek ${data.gw.number} – Upcoming fixtures` : "Upcoming fixtures"}
@@ -122,7 +122,7 @@ export default function RumblePlayPage() {
       <div>
         <h3 className="text-2xl font-semibold mb-3">Pick your club</h3>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-2 gap-y-2 [grid-auto-rows:min-content]">  
           {(data?.clubs ?? []).map((c: any) => {
             const used = (data?.usedClubIds ?? []).includes(c.id);
             const isCurrentPick = data?.pickedClubId === c.id;
@@ -151,7 +151,7 @@ export default function RumblePlayPage() {
           })}
         </div>
 
-        <div className="mt-4 flex items-center gap-4">
+        <div className="mt-2 flex items-center gap-4">
           <button
             onClick={handleSubmit}
             disabled={submitDisabled}
