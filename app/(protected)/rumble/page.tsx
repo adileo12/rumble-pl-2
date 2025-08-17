@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import Watermark from "@/src/components/Watermark"; 
 
 type ApiResp = { ok: boolean; data: any };
 
@@ -168,6 +169,14 @@ export default function RumblePlayPage() {
               ? new Date(data.deadline).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
               : "TBD"}
           </div>
+
+           <div className="relative min-h-screen">
+      <Watermark />  {/* <-- add this line */}
+
+      <div className="p-6 space-y-8">
+        {/* your existing content (header, table, buttons, etc.) */}
+      </div>
+    </div>
         </div>
       </div>
     </div>
