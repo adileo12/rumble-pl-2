@@ -6,41 +6,53 @@ type FplBootstrap = {
   teams: { id: number; name: string; short_name: string }[];
 };
 
-function normalizeName(n: string) {
-  return n.trim();
+function norm(s: string) {
+  return s.trim().toLowerCase();
 }
 
 export async function POST() {
   const res = await fetch("https://fantasy.premierleague.com/api/bootstrap-static/");
-  if (!res.ok) return NextResponse.json({ ok: false, error: "FPL bootstrap fetch failed" }, { status: 502 });
+  if (!res.ok) {
+    return NextResponse.json({ ok: false, error: "FPL bootstrap fetch failed" }, { status: 502 });
+  }
   const data = (await res.json()) as FplBootstrap;
 
+  // Load existing once and build case-insensitive maps (SQLite can't use `mode: "insensitive"`)
+  const existingClubs = await db.club.findMany({
+    select: { id: true, name: true, shortName: true },
+  });
+  const byShort = new Map(existingClubs.map(c => [norm(c.shortName), c]));
+  const byName  = new Map(existingClubs.map(c => [norm(c.name), c]));
+
+  let created = 0, updated = 0;
+
   for (const t of data.teams) {
-    const name = normalizeName(t.name);
-    const short = t.short_name;
+    const name = t.name.trim();
+    const short = t.short_name.trim();
+    const keyShort = norm(short);
+    const keyName  = norm(name);
 
-    // Try exact short_name (case-insensitive), else try name (case-insensitive)
-    const existing =
-      (await db.club.findFirst({
-        where: { shortName: { equals: short, mode: "insensitive" } },
-        select: { id: true },
-      })) ||
-      (await db.club.findFirst({
-        where: { name: { equals: name, mode: "insensitive" } },
-        select: { id: true },
-      }));
+    const match = byShort.get(keyShort) || byName.get(keyName);
 
-    if (existing) {
+    if (match) {
       await db.club.update({
-        where: { id: existing.id },
+        where: { id: match.id },
         data: { name, shortName: short, active: true },
       });
+      // keep maps current to avoid re-creating within the same run
+      byShort.set(keyShort, { id: match.id, name, shortName: short });
+      byName.set(keyName,   { id: match.id, name, shortName: short });
+      updated++;
     } else {
-      await db.club.create({
+      const createdRow = await db.club.create({
         data: { name, shortName: short, active: true },
+        select: { id: true, name: true, shortName: true },
       });
+      byShort.set(keyShort, createdRow);
+      byName.set(keyName, createdRow);
+      created++;
     }
   }
 
-  return NextResponse.json({ ok: true, count: data.teams.length });
+  return NextResponse.json({ ok: true, created, updated, totalFromFpl: data.teams.length });
 }
