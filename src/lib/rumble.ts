@@ -1,68 +1,65 @@
 // src/lib/rumble.ts
 import { db } from "@/src/lib/db";
 
-export function toIST(d: Date) {
-  // Only for display; stores remain UTC
-  return new Intl.DateTimeFormat("en-IN", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "Asia/Kolkata",
-  }).format(d);
+export function computeDeadline(kickoffs: (Date | null)[]) {
+  const ks = kickoffs.filter((d): d is Date => d instanceof Date);
+  if (!ks.length) return { deadline: null as Date | null };
+  const first = new Date(Math.min(...ks.map((d) => d.getTime())));
+  return { deadline: new Date(first.getTime() - 30 * 60 * 1000) };
 }
 
-export function computeDeadline(kickoffs: Date[]): { deadline: Date | null } {
-  if (!kickoffs.length) return { deadline: null };
-  const first = new Date(Math.min(...kickoffs.map(k => k.getTime())));
-  const deadline = new Date(first.getTime() - 30 * 60 * 1000); // -30m
-  return { deadline };
-}
+type GWShape = {
+  id: string;
+  number: number;
+  deadline: Date | null;
+  start?: Date | null;
+  end?: Date | null;
+  isLocked?: boolean;
+};
 
-type FormLetter = "W" | "D" | "L";
-export async function last5Form(clubId: string, until: Date): Promise<FormLetter[]> {
-  // Look back at completed fixtures (assumes status 'FINISHED' or goals present)
-  const fixtures = await db.fixture.findMany({
-    where: {
-      OR: [{ homeClubId: clubId }, { awayClubId: clubId }],
-      kickoff: { lt: until },
-      // If you have a status enum/string marking completed, add it here
-    },
-    orderBy: { kickoff: "desc" },
-    take: 5,
-    select: { homeClubId: true, awayClubId: true, homeGoals: true, awayGoals: true },
-  });
-
-  return fixtures.map(f => {
-    if (f.homeGoals == null || f.awayGoals == null) return "D"; // fallback if not graded
-    const isHome = f.homeClubId === clubId;
-    const gf = isHome ? f.homeGoals : f.awayGoals;
-    const ga = isHome ? f.awayGoals : f.homeGoals;
-    if (gf > ga) return "W";
-    if (gf < ga) return "L";
-    return "D";
-  }).reverse(); // oldest → newest for display, or remove .reverse() if you prefer newest-left
-}
-
-export async function getCurrentSeasonAndGW() {
+export async function getCurrentSeasonAndGW(): Promise<{
+  season: { id: string; name?: string; year?: number } | null;
+  gw: GWShape | null;
+}> {
   const season = await db.season.findFirst({
     where: { isActive: true },
-    orderBy: { year: "desc" },
     select: { id: true, name: true, year: true },
   });
   if (!season) return { season: null, gw: null };
 
   const now = new Date();
-  // Prefer an open GW; else the next one with fixtures
-  let gw = await db.gameweek.findFirst({
-    where: { seasonId: season.id, start: { lte: now }, end: { gte: now } },
-    orderBy: { number: "asc" },
-    select: { id: true, number: true, start: true, end: true, isLocked: true, deadline: true },
-  });
+
+  // 1) Try by Gameweek.deadline if present
+  let gw =
+    (await db.gameweek.findFirst({
+      where: { seasonId: season.id, deadline: { gte: now } },
+      orderBy: { deadline: "asc" },
+      select: { id: true, number: true, deadline: true, start: true, end: true, isLocked: true },
+    })) ?? null;
+
+  // 2) Fallback: earliest future FIXTURE's GW
   if (!gw) {
-    gw = await db.gameweek.findFirst({
-      where: { seasonId: season.id, start: { gt: now } },
-      orderBy: { number: "asc" },
-      select: { id: true, number: true, start: true, end: true, isLocked: true, deadline: true },
+    const fx = await db.fixture.findFirst({
+      where: { gw: { seasonId: season.id }, kickoff: { gt: now } },
+      orderBy: { kickoff: "asc" },
+      select: {
+        gw: { select: { id: true, number: true, deadline: true, start: true, end: true, isLocked: true } },
+      },
     });
+    if (fx?.gw) gw = fx.gw as any;
   }
+
+  // 3) Fallback: most recent past FIXTURE's GW
+  if (!gw) {
+    const fx = await db.fixture.findFirst({
+      where: { gw: { seasonId: season.id }, kickoff: { lt: now } },
+      orderBy: { kickoff: "desc" },
+      select: {
+        gw: { select: { id: true, number: true, deadline: true, start: true, end: true, isLocked: true } },
+      },
+    });
+    if (fx?.gw) gw = fx.gw as any;
+  }
+
   return { season, gw };
 }
