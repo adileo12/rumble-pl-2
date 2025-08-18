@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { db } from "@/src/lib/db";
 import { computeDeadline, getCurrentSeasonAndGW } from "@/src/lib/rumble";
+import { getOrCreateState, isEliminated } from "@/src/lib/rumble-state";
 
 export async function POST(req: Request) {
   const sid = (await cookies()).get("sid")?.value;
@@ -26,6 +27,14 @@ export async function POST(req: Request) {
     where: { gwId: gw.id },
     select: { kickoff: true },
   });
+
+  const eliminated = await isEliminated(sid, season.id);
+if (eliminated) {
+  return NextResponse.json(
+    { ok: false, error: "You are eliminated and cannot submit a pick." },
+    { status: 403 }
+  );
+}
 
   // computeDeadline accepts (Date | null)[] and filters internally
   const { deadline } = computeDeadline(kicks.map((k) => k.kickoff));
