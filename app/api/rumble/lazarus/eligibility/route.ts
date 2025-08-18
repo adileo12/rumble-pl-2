@@ -1,3 +1,4 @@
+// app/api/rumble/lazarus/eligibility/route.ts
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { db } from "@/src/lib/db";
@@ -19,14 +20,13 @@ export async function GET() {
     return NextResponse.json({ ok: true, eligible: false });
   }
 
-  const elimGw = await db.gw.findFirst({
+  const elimGw = await db.gameweek.findFirst({
     where: { seasonId: season.id, number: st.eliminatedAtGw },
     select: { id: true, number: true },
   });
   if (!elimGw) return NextResponse.json({ ok: true, eligible: false });
 
-  // Next GW and its deadline
-  const nextGw = await db.gw.findFirst({
+  const nextGw = await db.gameweek.findFirst({
     where: { seasonId: season.id, number: { gt: elimGw.number } },
     orderBy: { number: "asc" },
     select: { id: true, number: true },
@@ -35,14 +35,11 @@ export async function GET() {
 
   const kicks = await db.fixture.findMany({ where: { gwId: nextGw.id }, select: { kickoff: true } });
   const { deadline } = computeDeadline(kicks.map(k => k.kickoff));
-
   if (!deadline) return NextResponse.json({ ok: true, eligible: false });
-  const now = Date.now();
-  const eligible = now < deadline.getTime();
 
   return NextResponse.json({
     ok: true,
-    eligible,
+    eligible: Date.now() < deadline.getTime(),
     window: { reviveBy: deadline.toISOString(), forGw: nextGw.number },
   });
 }
