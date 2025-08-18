@@ -1,215 +1,96 @@
-generator client {
-  provider = "prisma-client-js";
-}
+// app/api/admin/process-deadline/route.ts
+import { NextResponse } from "next/server";
+import { db } from "@/src/lib/db";
+import { computeDeadline, getCurrentSeasonAndGW } from "@/src/lib/rumble";
+import { getOrCreateState } from "@/src/lib/rumble-state";
 
-datasource db {
-  provider = "mysql"
-  url      = env("DATABASE_URL")
-}
+/**
+ * Runs after the current GW deadline:
+ * - If a user missed making a pick, auto-pick the first unused club alphabetically (Proxy),
+ *   up to 2 times per season.
+ * - If no proxies left, mark them eliminated at this GW.
+ */
+export async function POST() {
+  const { season, gw } = await getCurrentSeasonAndGW();
+  if (!season || !gw) {
+    return NextResponse.json({ ok: false, error: "No active gameweek" }, { status: 400 });
+  }
 
-model User {
-  id                 String         @id @default(uuid())
-  name               String
-  secretCode         String         @unique(map: "User_secretCode_key") @map("secretcode") @db.VarChar(64)
-  joinCode           String?        @default("PUBLIC")
-  isAdmin            Boolean        @default(false)
-  alive              Boolean        @default(true)
-  createdAt          DateTime       @default(now())
-  updatedAt          DateTime       @updatedAt
+  // Ensure deadline is actually passed
+  const kicks = await db.fixture.findMany({
+    where: { gwId: gw.id },
+    select: { kickoff: true },
+  });
+  const { deadline } = computeDeadline(kicks.map(k => k.kickoff));
+  if (!deadline || Date.now() < deadline.getTime()) {
+    return NextResponse.json({ ok: false, error: "Deadline not yet passed" }, { status: 400 });
+  }
 
-  email              String?        @unique(map: "User_email_key")
-  adminPassword      String?        @map("admin_password")
-  adminPasswordHash  String?        @map("adminpasswordhash")
-  lastName           String?
+  // Participants: users who picked in any prior GW of this season
+  const priorUsers = await db.pick.findMany({
+    where: { seasonId: season.id, gw: { number: { lt: gw.number } } },
+    distinct: ["userId"],
+    select: { userId: true },
+  });
+  const userIds = priorUsers.map(u => u.userId);
 
-  picks              Pick[]
-  statuses           UserStatus[]
-  sessions           Session[]
-  jokerUsages        JokerUsage[]
+  // Alphabetical list of active clubs
+  const clubs = await db.club.findMany({
+    where: { active: true },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true },
+  });
 
-  @@map("User")
-  @@index([name])
-}
+  let proxied = 0;
+  let eliminated = 0;
 
-model Season {
-  id                String            @id @default(uuid())
-  name              String
-  year              Int
-  isActive          Boolean           @default(true)
+  for (const uid of userIds) {
+    // Already picked for this GW? skip
+    const existing = await db.pick.findFirst({
+      where: { userId: uid, gwId: gw.id },
+      select: { id: true },
+    });
+    if (existing) continue;
 
-  gameweeks         Gameweek[]
-  statuses          UserStatus[]
-  jokerAssignments  JokerAssignment[]
-  rumbleStates      RumbleState[]
+    const state = await getOrCreateState(uid, season.id);
+    if (state.eliminatedAtGw) continue; // already eliminated
 
-  @@index([isActive])
-}
+    // Find first unused club (by this user in earlier GWs this season)
+    const used = await db.pick.findMany({
+      where: { userId: uid, seasonId: season.id, gw: { number: { lt: gw.number } } },
+      select: { clubId: true },
+    });
+    const usedSet = new Set(used.map(u => u.clubId));
+    const nextClub = clubs.find(c => !usedSet.has(c.id));
 
-model Gameweek {
-  id                String     @id @default(uuid())
-  seasonId          String
-  number            Int
-  deadline          DateTime
-  isLocked          Boolean    @default(false)
-  graded            Boolean    @default(false)
-  start             DateTime?
-  end               DateTime?
+    if (state.proxiesUsed < 2 && nextClub) {
+      await db.$transaction([
+        db.pick.upsert({
+          where: { userId_gwId: { userId: uid, gwId: gw.id } },
+          update: { clubId: nextClub.id, source: "PROXY" },
+          create: {
+            userId: uid,
+            seasonId: season.id,
+            gwId: gw.id,
+            clubId: nextClub.id,
+            source: "PROXY",
+          },
+        }),
+        db.rumbleState.update({
+          where: { userId_seasonId: { userId: uid, seasonId: season.id } },
+          data: { proxiesUsed: { increment: 1 } },
+        }),
+      ]);
+      proxied++;
+    } else {
+      // No proxies left -> eliminate now
+      await db.rumbleState.update({
+        where: { userId_seasonId: { userId: uid, seasonId: season.id } },
+        data: { eliminatedAtGw: gw.number, eliminatedAt: new Date() },
+      });
+      eliminated++;
+    }
+  }
 
-  season            Season     @relation(fields: [seasonId], references: [id], onDelete: Cascade)
-
-  picks             Pick[]
-  fixtures          Fixture[]
-  jokerAssignments  JokerAssignment[]
-  jokerUsages       JokerUsage[]
-
-  @@unique([seasonId, number], name: "seasonId_number")
-  @@index([seasonId])
-  @@index([deadline])
-}
-
-model Club {
-  id                String         @id @default(uuid())
-  name              String
-  shortName         String
-  crestUrl          String?
-  active            Boolean        @default(true)
-  fplTeamId         Int?           @unique
-
-  picks             Pick[]
-  homeFix           Fixture[]      @relation("HomeTeam")
-  awayFix           Fixture[]      @relation("AwayTeam")
-  jokerAssignments  JokerAssignment[]
-  jokerUsages       JokerUsage[]
-
-  @@index([active])
-}
-
-model Fixture {
-  id           String   @id @default(uuid())
-
-  gwId         String
-  gw           Gameweek @relation(fields: [gwId], references: [id], onDelete: Cascade)
-
-  homeClubId   String
-  homeClub     Club     @relation("HomeTeam", fields: [homeClubId], references: [id], onDelete: Cascade)
-
-  awayClubId   String
-  awayClub     Club     @relation("AwayTeam", fields: [awayClubId], references: [id], onDelete: Cascade)
-
-  kickoff      DateTime
-  homeGoals    Int?
-  awayGoals    Int?
-  status       String
-
-  @@index([gwId])
-  @@index([kickoff])
-  @@index([homeClubId])
-  @@index([awayClubId])
-}
-
-model Pick {
-  id          String    @id @default(uuid())
-
-  userId      String
-  seasonId    String
-  gwId        String
-  clubId      String
-
-  createdAt   DateTime  @default(now())
-  source      String    @default("USER")
-
-  // Relations
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  gw          Gameweek  @relation(fields: [gwId], references: [id], onDelete: Cascade)
-  club        Club      @relation(fields: [clubId], references: [id], onDelete: Cascade)
-
-  // You asked for both — keep them so the code can use either:
-  @@unique([userId, seasonId, gwId], name: "userId_seasonId_gwId")
-  @@unique([userId, gwId], name: "userId_gwId")
-
-  // Helpful indexes for lookups
-  @@index([userId])
-  @@index([seasonId])
-  @@index([gwId])
-  @@index([clubId])
-}
-
-model UserStatus {
-  id                  String   @id @default(uuid())
-  userId              String
-  seasonId            String
-  isAlive             Boolean  @default(true)
-  eliminatedGw        Int?
-  jokerLifelinesLeft  Int      @default(2)
-  lastUpdated         DateTime @default(now()) @updatedAt
-
-  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  season              Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, seasonId], name: "userId_seasonId")
-  @@index([userId])
-  @@index([seasonId])
-}
-
-model Session {
-  id         String   @id @default(uuid())
-  userId     String
-  token      String   @unique
-  expiresAt  DateTime
-  createdAt  DateTime @default(now())
-
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([expiresAt])
-}
-
-model JokerAssignment {
-  id          String   @id @default(uuid())
-  seasonId    String
-  gameweekId  String
-  clubId      String
-  createdAt   DateTime @default(now())
-
-  season      Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
-  gameweek    Gameweek @relation(fields: [gameweekId], references: [id], onDelete: Cascade)
-  club        Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
-
-  @@unique([seasonId, gameweekId], name: "seasonId_gameweekId")
-  @@index([seasonId])
-  @@index([gameweekId])
-  @@index([clubId])
-}
-
-model JokerUsage {
-  id          String   @id @default(uuid())
-  userId      String
-  gameweekId  String
-  clubId      String
-  pickedAt    DateTime @default(now())
-
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  gameweek    Gameweek @relation(fields: [gameweekId], references: [id], onDelete: Cascade)
-  club        Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
-
-  // Optional business rule: only one joker usage per user per gameweek
-  @@unique([userId, gameweekId], name: "userId_gameweekId")
-
-  @@index([userId])
-  @@index([gameweekId])
-  @@index([clubId])
-}
-
-model RumbleState {
-  id              String   @id @default(uuid())
-  userId          String
-  seasonId        String
-  proxiesUsed     Int      @default(0)  // 0..2
-  lazarusUsed     Boolean  @default(false)
-  eliminatedAtGw  Int?
-  eliminatedAt    DateTime?
-
-  season          Season   @relation(fields: [seasonId], references: [id])
-
-  @@unique([userId, seasonId])
+  return NextResponse.json({ ok: true, gw: gw.number, proxied, eliminated });
 }
