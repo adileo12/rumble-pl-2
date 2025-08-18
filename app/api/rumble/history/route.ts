@@ -1,9 +1,7 @@
 // app/api/rumble/history/route.ts
 import { NextResponse } from "next/server";
 import { db } from "@/src/lib/db";
-// ⚠️ Use the same auth helper you use in /api/rumble/pick.
-// If your project uses `auth` from "@/auth", this will work as-is.
-import { auth } from "@/auth";
+import { getToken } from "next-auth/jwt"; // <- uses NEXTAUTH_SECRET + cookies
 
 function resultForClub(args: {
   clubId: string;
@@ -28,14 +26,18 @@ function resultForClub(args: {
   return { code: "L" as const, verb: "lost" as const };
 }
 
-export async function GET() {
-  const session = await auth();
-  const userId = session?.user?.id;
+export async function GET(req: Request) {
+  // Read NextAuth JWT from cookies (no custom import needed)
+  const token = await getToken({ req });
+  const userId = token?.sub as string | undefined;
   if (!userId) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
-  const season = await db.season.findFirst({ where: { isActive: true }, select: { id: true } });
+  const season = await db.season.findFirst({
+    where: { isActive: true },
+    select: { id: true },
+  });
   if (!season) {
     return NextResponse.json({ ok: false, error: "No active season" }, { status: 400 });
   }
@@ -105,7 +107,7 @@ export async function GET() {
           : fx?.status ?? "—",
       opponent,
       resultCode: res.code, // "W" | "D" | "L" | "TBD"
-      resultVerb: res.verb, // "won" | "drew" | "lost" | "TBD"
+      resultVerb: res.verb,  // "won" | "drew" | "lost" | "TBD"
     });
   }
 
