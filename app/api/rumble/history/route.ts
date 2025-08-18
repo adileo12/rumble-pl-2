@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { db } from "@/src/lib/db";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/src/lib/auth"; // <-- use the same path your pick route uses
+import { getCurrentSeasonAndGW } from "@/src/lib/rumble";
+
+type ResultCode = "W" | "D" | "L" | "TBD";
 
 function resultForClub(args: {
   clubId: string;
@@ -10,48 +12,76 @@ function resultForClub(args: {
   homeGoals: number | null;
   awayGoals: number | null;
   status: string | null;
-}) {
+}): { code: ResultCode; verb: "won" | "drew" | "lost" | "TBD" } {
   const { clubId, homeClubId, awayClubId, homeGoals, awayGoals, status } = args;
+
+  // Only decide W/D/L when full time and both scores are known
   if (status !== "FT" || homeGoals == null || awayGoals == null) {
-    return { code: "TBD" as const, verb: "TBD" as const };
+    return { code: "TBD", verb: "TBD" };
   }
+
   const isHome = clubId === homeClubId;
   const my = isHome ? homeGoals : awayGoals;
   const opp = isHome ? awayGoals : homeGoals;
-  if (my > opp) return { code: "W" as const, verb: "won" as const };
-  if (my === opp) return { code: "D" as const, verb: "drew" as const };
-  return { code: "L" as const, verb: "lost" as const };
+
+  if (my > opp) return { code: "W", verb: "won" };
+  if (my === opp) return { code: "D", verb: "drew" };
+  return { code: "L", verb: "lost" };
 }
 
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  const userId = (session?.user as any)?.id as string | undefined;
-  if (!userId) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  // Same auth pattern as /api/rumble/pick
+  const sid = (await cookies()).get("sid")?.value;
+  if (!sid) {
+    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  }
 
-  const season = await db.season.findFirst({ where: { isActive: true }, select: { id: true } });
-  if (!season) return NextResponse.json({ ok: false, error: "No active season" }, { status: 400 });
+  // We only need the active season id (your picks store seasonId)
+  const { season } = await getCurrentSeasonAndGW();
+  if (!season) {
+    return NextResponse.json({ ok: false, error: "No active season" }, { status: 400 });
+  }
 
+  // All of this user's picks in the active season
   const picks = await db.pick.findMany({
-    where: { userId, gw: { seasonId: season.id } },
+    where: { userId: sid, seasonId: season.id },
     select: {
       id: true,
       clubId: true,
       gwId: true,
       createdAt: true,
       club: { select: { id: true, name: true, shortName: true } },
-      gw: { select: { id: true, number: true } },
+      gw: { select: { number: true } },
     },
     orderBy: [{ gw: { number: "asc" } }, { createdAt: "asc" }],
   });
 
-  const items = [];
+  const items: Array<{
+    pickId: string;
+    gwNumber: number;
+    pickedClub: { id: string; name: string; shortName: string };
+    opponent: { side: "H" | "A"; id: string; name: string; shortName: string } | null;
+    kickoff: Date | null;
+    score: string | null;
+    resultCode: ResultCode;
+    resultVerb: "won" | "drew" | "lost" | "TBD";
+  }> = [];
+
   for (const p of picks) {
+    // Find the picked club’s fixture in that GW
     const fx = await db.fixture.findFirst({
-      where: { gwId: p.gwId, OR: [{ homeClubId: p.clubId }, { awayClubId: p.clubId }] },
+      where: {
+        gwId: p.gwId,
+        OR: [{ homeClubId: p.clubId }, { awayClubId: p.clubId }],
+      },
       select: {
-        id: true, status: true, kickoff: true,
-        homeGoals: true, awayGoals: true,
-        homeClubId: true, awayClubId: true,
+        id: true,
+        status: true,
+        kickoff: true,
+        homeGoals: true,
+        awayGoals: true,
+        homeClubId: true,
+        awayClubId: true,
         home: { select: { id: true, name: true, shortName: true } },
         away: { select: { id: true, name: true, shortName: true } },
       },
@@ -64,27 +94,28 @@ export async function GET() {
         ? { side: "A" as const, id: fx.home.id, name: fx.home.name, shortName: fx.home.shortName }
         : null;
 
-    const res = fx
-      ? resultForClub({
-          clubId: p.clubId,
-          homeClubId: fx.homeClubId,
-          awayClubId: fx.awayClubId,
-          homeGoals: fx.homeGoals,
-          awayGoals: fx.awayGoals,
-          status: fx.status ?? null,
-        })
-      : { code: "TBD" as const, verb: "TBD" as const };
+    const res =
+      fx
+        ? resultForClub({
+            clubId: p.clubId,
+            homeClubId: fx.homeClubId,
+            awayClubId: fx.awayClubId,
+            homeGoals: fx.homeGoals,
+            awayGoals: fx.awayGoals,
+            status: fx.status ?? null,
+          })
+        : { code: "TBD" as ResultCode, verb: "TBD" as const };
 
     items.push({
       pickId: p.id,
       gwNumber: p.gw.number,
       pickedClub: p.club,
+      opponent,
       kickoff: fx?.kickoff ?? null,
       score:
         fx?.homeGoals != null && fx?.awayGoals != null
           ? `${fx.homeGoals}-${fx.awayGoals}`
           : fx?.status ?? "—",
-      opponent,
       resultCode: res.code,
       resultVerb: res.verb,
     });
