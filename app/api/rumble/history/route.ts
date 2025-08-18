@@ -1,7 +1,12 @@
 // app/api/rumble/history/route.ts
 import { NextResponse } from "next/server";
 import { db } from "@/src/lib/db";
-import { getToken } from "next-auth/jwt"; // <- uses NEXTAUTH_SECRET + cookies
+
+export async function POST(req: Request) {
+  const sid = (await cookies()).get("sid")?.value;
+  if (!sid) {
+    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  }
 
 function resultForClub(args: {
   clubId: string;
