@@ -117,3 +117,51 @@ export default function RumbleDashboard() {
     </div>
   );
 }
+
+function LazarusCard() {
+  const [elig, setElig] = React.useState<{ eligible: boolean; window?: { reviveBy: string; forGw: number } } | null>(null);
+  const [msg, setMsg] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch("/api/rumble/lazarus/eligibility", { cache: "no-store" });
+        const j = await r.json();
+        if (j.ok) setElig({ eligible: j.eligible, window: j.window });
+      } catch {}
+    })();
+  }, []);
+
+  if (!elig || !elig.eligible) return null;
+
+  const deadlineLocal = elig.window?.reviveBy
+    ? new Date(elig.window.reviveBy).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+    : null;
+
+  return (
+    <div className="mt-4 rounded border p-4 bg-orange-50">
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="font-semibold">Lazarus Card</div>
+          <div className="text-sm text-gray-700">
+            You’re eliminated, but you can revive once before the next deadline.
+            {deadlineLocal && <> Use before <span className="font-medium">{deadlineLocal} IST</span> (GW {elig.window?.forGw}).</>}
+          </div>
+          {msg && <div className="text-sm mt-1 text-green-700">{msg}</div>}
+        </div>
+        <button
+          className="px-3 py-2 rounded bg-black text-white"
+          onClick={async () => {
+            const r = await fetch("/api/rumble/lazarus/activate", { method: "POST" });
+            const j = await r.json();
+            if (j.ok) { setMsg("Revived! You may pick again."); }
+            else { setMsg(j.error || "Could not activate."); }
+          }}
+        >
+          Activate
+        </button>
+      </div>
+    </div>
+  );
+}
+
