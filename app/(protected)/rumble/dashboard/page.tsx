@@ -103,10 +103,17 @@ export default function RumbleDashboard() {
         </table>
       </div>
 
-      {/* Simple explainer */}
-      <p className="text-xs text-gray-500">
-        Result shows whether your picked club won, drew, or lost their GW match.
-      </p>
+     <div className="text-xs text-gray-500 space-y-1">
+  <div className="font-medium">Legend</div>
+  <ul className="list-disc ml-5 space-y-0.5">
+    <li><span className="font-semibold">NS</span> — Not Started</li>
+    <li><span className="font-semibold">LIVE</span> — In Play</li>
+    <li><span className="font-semibold">FT</span> — Full Time</li>
+    <li><span className="font-semibold">PST</span> — Postponed</li>
+    <li><span className="font-semibold">TBC</span> — To Be Confirmed</li>
+    <li><span className="font-semibold">TBD</span> — Result pending / fixture not complete</li>
+  </ul>
+</div>
     </div>
   );
 }
