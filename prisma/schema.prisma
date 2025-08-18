@@ -201,7 +201,7 @@ model JokerUsage {
 }
 
 model RumbleState {
-  id              String   @id @default(cuid())
+  id              String   @id @default(uuid())
   userId          String
   seasonId        String
   proxiesUsed     Int      @default(0)  // 0..2
