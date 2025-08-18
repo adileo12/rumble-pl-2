@@ -1,124 +1,88 @@
-// app/api/rumble/history/route.ts
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { db } from "@/src/lib/db";
-import { getCurrentSeasonAndGW } from "@/src/lib/rumble";
-
-type ResultCode = "W" | "D" | "L" | "TBD";
-
-function resultForClub(args: {
-  clubId: string;
-  homeClubId: string;
-  awayClubId: string;
-  homeGoals: number | null;
-  awayGoals: number | null;
-  status: string | null;
-}): { code: ResultCode; verb: "won" | "drew" | "lost" | "TBD" } {
-  const { clubId, homeClubId, awayClubId, homeGoals, awayGoals, status } = args;
-  if (status !== "FT" || homeGoals == null || awayGoals == null) return { code: "TBD", verb: "TBD" };
-  const isHome = clubId === homeClubId;
-  const my = isHome ? homeGoals : awayGoals;
-  const opp = isHome ? awayGoals : homeGoals;
-  if (my > opp) return { code: "W", verb: "won" };
-  if (my === opp) return { code: "D", verb: "drew" };
-  return { code: "L", verb: "lost" };
-}
 
 export async function GET() {
-  // Same auth pattern as /api/rumble/pick
-  const sid = (await cookies()).get("sid")?.value;
-  if (!sid) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  try {
+    const sid = (await cookies()).get("sid")?.value;
+    if (!sid) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
 
-  const { season } = await getCurrentSeasonAndGW();
-  if (!season) return NextResponse.json({ ok: false, error: "No active season" }, { status: 400 });
+    const season = await db.season.findFirst({
+      where: { isActive: true },
+      select: { id: true },
+    });
+    if (!season) return NextResponse.json({ ok: false, rows: [] });
 
-  // User's picks for the active season
-  const picks = await db.pick.findMany({
-    where: { userId: sid, seasonId: season.id },
-    select: {
-      id: true,
-      clubId: true,
-      gwId: true,
-      createdAt: true,
-      club: { select: { id: true, name: true, shortName: true } },
-      gw: { select: { number: true } },
-    },
-    orderBy: [{ gw: { number: "asc" } }, { createdAt: "asc" }],
-  });
+    const picks = await db.pick.findMany({
+      where: { userId: sid, seasonId: season.id },
+      select: { clubId: true, gwId: true, club: { select: { shortName: true, name: true, id: true } }, gw: { select: { number: true } } },
+      orderBy: { gw: { number: "asc" } },
+    });
 
-  const items: Array<{
-    pickId: string;
-    gwNumber: number;
-    pickedClub: { id: string; name: string; shortName: string };
-    opponent: { side: "H" | "A"; id: string; name: string; shortName: string } | null;
-    kickoff: Date | null;
-    score: string | null;
-    resultCode: ResultCode;
-    resultVerb: "won" | "drew" | "lost" | "TBD";
-  }> = [];
+    if (picks.length === 0) return NextResponse.json({ ok: true, rows: [] });
 
-  for (const p of picks) {
-    // Find fixture for the picked club in that GW (no relations)
-    const fx = await db.fixture.findFirst({
-      where: {
-        gwId: p.gwId,
-        OR: [{ homeClubId: p.clubId }, { awayClubId: p.clubId }],
-      },
+    // Load all fixtures for those GW ids once
+    const gwIds = Array.from(new Set(picks.map(p => p.gwId)));
+    const fixtures = await db.fixture.findMany({
+      where: { gwId: { in: gwIds } },
       select: {
-        id: true,
-        status: true,
-        kickoff: true,
-        homeGoals: true,
-        awayGoals: true,
+        gwId: true,
         homeClubId: true,
         awayClubId: true,
+        homeGoals: true,
+        awayGoals: true,
+        status: true,
+        kickoff: true,
+        homeClub: { select: { shortName: true } },
+        awayClub: { select: { shortName: true } },
       },
     });
 
-    let opponent: { side: "H" | "A"; id: string; name: string; shortName: string } | null = null;
-    if (fx) {
-      const isHome = p.clubId === fx.homeClubId;
-      const oppId = isHome ? fx.awayClubId : fx.homeClubId;
-      const oppClub = await db.club.findUnique({
-        where: { id: oppId },
-        select: { id: true, name: true, shortName: true },
-      });
-      if (oppClub) {
-        opponent = {
-          side: isHome ? "H" : "A",
-          id: oppClub.id,
-          name: oppClub.name,
-          shortName: oppClub.shortName,
-        };
+    const rows = picks.map(p => {
+      const fx = fixtures.find(
+        f => (f.homeClubId === p.clubId || f.awayClubId === p.clubId) && f.gwId === p.gwId
+      );
+
+      const isHome = fx ? fx.homeClubId === p.clubId : false;
+      const oppShort = fx ? (isHome ? fx.awayClub.shortName : fx.homeClub.shortName) : null;
+      const venue: "H" | "A" | "-" = fx ? (isHome ? "H" : "A") : "-";
+
+      // score/status
+      let scoreOrStatus = "TBD";
+      if (fx) {
+        if (fx.homeGoals != null && fx.awayGoals != null) {
+          scoreOrStatus = `${fx.homeGoals}-${fx.awayGoals}`;
+        } else {
+          scoreOrStatus = fx.status ?? "TBD";
+        }
       }
-    }
 
-    const res: { code: ResultCode; verb: "won" | "drew" | "lost" | "TBD" } =
-  fx
-    ? resultForClub({
-        clubId: p.clubId,
-        homeClubId: fx.homeClubId,
-        awayClubId: fx.awayClubId,
-        homeGoals: fx.homeGoals,
-        awayGoals: fx.awayGoals,
-        status: fx.status ?? null,
-      })
-    : { code: "TBD", verb: "TBD" };
+      // result
+      let resultCode: "W" | "L" | "D" | "TBD" = "TBD";
+      if (fx && fx.homeGoals != null && fx.awayGoals != null) {
+        const my = isHome ? fx.homeGoals : fx.awayGoals;
+        const opp = isHome ? fx.awayGoals : fx.homeGoals;
+        resultCode = my > opp ? "W" : my < opp ? "L" : "D";
+      }
 
-    items.push({
-      pickId: p.id,
-      gwNumber: p.gw.number,
-      pickedClub: p.club,
-      opponent,
-      kickoff: fx?.kickoff ?? null,
-      score:
-        fx?.homeGoals != null && fx?.awayGoals != null
-          ? `${fx.homeGoals}-${fx.awayGoals}`
-          : fx?.status ?? "—",
-      resultCode: res.code,
-      resultVerb: res.verb,
+      return {
+        gwNumber: p.gw.number,
+        clubId: p.club.id,
+        clubShort: p.club.shortName,
+        clubName: p.club.name,
+        opponentShort: oppShort,
+        venue,
+        kickoffISO: fx?.kickoff?.toISOString() ?? null,
+        scoreOrStatus,
+        resultCode,
+        resultVerb:
+          resultCode === "W" ? "won" : resultCode === "L" ? "lost" : resultCode === "D" ? "drew" : "TBD",
+      };
     });
-  }
 
-  return NextResponse.json({ ok: true, items });
+    return NextResponse.json({ ok: true, rows });
+  } catch (e: any) {
+    console.error("GET /api/rumble/history failed:", e);
+    return NextResponse.json({ ok: false, error: "Internal error" }, { status: 500 });
+  }
 }
