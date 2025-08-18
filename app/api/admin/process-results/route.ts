@@ -32,11 +32,23 @@ export async function POST(req: Request) {
     where: { gwId: gw.id },
     select: { homeClubId: true, awayClubId: true, homeGoals: true, awayGoals: true },
   });
-  const fxByClub: Record<string, { homeClubId: string; awayClubId: string; homeGoals: number; awayGoals: number }> = {};
-  for (const f of fxAll) {
-    fxByClub[f.homeClubId] = f;
-    fxByClub[f.awayClubId] = f;
-  }
+ const fxByClub: Record<string, {
+  homeClubId: string;
+  awayClubId: string;
+  homeGoals: number | null;
+  awayGoals: number | null;
+}> = {};
+
+for (const f of fxAll) {
+  const entry = {
+    homeClubId: f.homeClubId,
+    awayClubId: f.awayClubId,
+    homeGoals: f.homeGoals ?? null,
+    awayGoals: f.awayGoals ?? null,
+  };
+  fxByClub[f.homeClubId] = entry;
+  fxByClub[f.awayClubId] = entry;
+}
 
   const picks = await db.pick.findMany({
     where: { gwId: gw.id },
