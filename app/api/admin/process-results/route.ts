@@ -19,10 +19,11 @@ export async function POST(req: Request) {
   });
   if (!gw) return NextResponse.json({ ok: false, error: "GW not found" }, { status: 404 });
 
-  const fixtures = await db.fixture.findMany({
-    where: { gwId: gw.id },
-    select: { status: true, homeGoals: true, awayGoals: true },
-  });
+  const fxAll = await db.fixture.findMany({
+  where: { gwId: gw.id },
+  select: { homeClubId: true, awayClubId: true, homeGoals: true, awayGoals: true },
+});
+
   if (!gwIsComplete(fixtures)) {
     return NextResponse.json({ ok: false, error: "GW not complete yet" }, { status: 400 });
   }
@@ -32,24 +33,24 @@ export async function POST(req: Request) {
     where: { gwId: gw.id },
     select: { homeClubId: true, awayClubId: true, homeGoals: true, awayGoals: true },
   });
- const fxByClub: Record<string, {
+const fxByClub: Record<string, {
   homeClubId: string;
   awayClubId: string;
-  homeGoals: number | null;
-  awayGoals: number | null;
+  homeGoals: number;
+  awayGoals: number;
 }> = {};
 
 for (const f of fxAll) {
+  if (f.homeGoals == null || f.awayGoals == null) continue; // skip unfinished, TS narrows
   const entry = {
     homeClubId: f.homeClubId,
     awayClubId: f.awayClubId,
-    homeGoals: f.homeGoals ?? null,
-    awayGoals: f.awayGoals ?? null,
+    homeGoals: f.homeGoals, // numbers now
+    awayGoals: f.awayGoals, // numbers now
   };
   fxByClub[f.homeClubId] = entry;
   fxByClub[f.awayClubId] = entry;
 }
-
   const picks = await db.pick.findMany({
     where: { gwId: gw.id },
     select: { userId: true, clubId: true, seasonId: true },
