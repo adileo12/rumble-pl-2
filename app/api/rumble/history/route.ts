@@ -1,3 +1,4 @@
+// app/api/rumble/history/route.ts
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { db } from "@/src/lib/db";
@@ -14,16 +15,10 @@ function resultForClub(args: {
   status: string | null;
 }): { code: ResultCode; verb: "won" | "drew" | "lost" | "TBD" } {
   const { clubId, homeClubId, awayClubId, homeGoals, awayGoals, status } = args;
-
-  // Only decide W/D/L when full time and both scores are known
-  if (status !== "FT" || homeGoals == null || awayGoals == null) {
-    return { code: "TBD", verb: "TBD" };
-  }
-
+  if (status !== "FT" || homeGoals == null || awayGoals == null) return { code: "TBD", verb: "TBD" };
   const isHome = clubId === homeClubId;
   const my = isHome ? homeGoals : awayGoals;
   const opp = isHome ? awayGoals : homeGoals;
-
   if (my > opp) return { code: "W", verb: "won" };
   if (my === opp) return { code: "D", verb: "drew" };
   return { code: "L", verb: "lost" };
@@ -32,17 +27,12 @@ function resultForClub(args: {
 export async function GET() {
   // Same auth pattern as /api/rumble/pick
   const sid = (await cookies()).get("sid")?.value;
-  if (!sid) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  }
+  if (!sid) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
 
-  // We only need the active season id (your picks store seasonId)
   const { season } = await getCurrentSeasonAndGW();
-  if (!season) {
-    return NextResponse.json({ ok: false, error: "No active season" }, { status: 400 });
-  }
+  if (!season) return NextResponse.json({ ok: false, error: "No active season" }, { status: 400 });
 
-  // All of this user's picks in the active season
+  // User's picks for the active season
   const picks = await db.pick.findMany({
     where: { userId: sid, seasonId: season.id },
     select: {
@@ -68,7 +58,7 @@ export async function GET() {
   }> = [];
 
   for (const p of picks) {
-    // Find the picked club’s fixture in that GW
+    // Find fixture for the picked club in that GW (no relations)
     const fx = await db.fixture.findFirst({
       where: {
         gwId: p.gwId,
@@ -82,29 +72,37 @@ export async function GET() {
         awayGoals: true,
         homeClubId: true,
         awayClubId: true,
-        home: { select: { id: true, name: true, shortName: true } },
-        away: { select: { id: true, name: true, shortName: true } },
       },
     });
 
-    const opponent =
-      fx && p.clubId === fx.homeClubId
-        ? { side: "H" as const, id: fx.away.id, name: fx.away.name, shortName: fx.away.shortName }
-        : fx && p.clubId === fx.awayClubId
-        ? { side: "A" as const, id: fx.home.id, name: fx.home.name, shortName: fx.home.shortName }
-        : null;
+    let opponent: { side: "H" | "A"; id: string; name: string; shortName: string } | null = null;
+    if (fx) {
+      const isHome = p.clubId === fx.homeClubId;
+      const oppId = isHome ? fx.awayClubId : fx.homeClubId;
+      const oppClub = await db.club.findUnique({
+        where: { id: oppId },
+        select: { id: true, name: true, shortName: true },
+      });
+      if (oppClub) {
+        opponent = {
+          side: isHome ? "H" : "A",
+          id: oppClub.id,
+          name: oppClub.name,
+          shortName: oppClub.shortName,
+        };
+      }
+    }
 
-    const res =
-      fx
-        ? resultForClub({
-            clubId: p.clubId,
-            homeClubId: fx.homeClubId,
-            awayClubId: fx.awayClubId,
-            homeGoals: fx.homeGoals,
-            awayGoals: fx.awayGoals,
-            status: fx.status ?? null,
-          })
-        : { code: "TBD" as ResultCode, verb: "TBD" as const };
+    const res = fx
+      ? resultForClub({
+          clubId: p.clubId,
+          homeClubId: fx.homeClubId,
+          awayClubId: fx.awayClubId,
+          homeGoals: fx.homeGoals,
+          awayGoals: fx.awayGoals,
+          status: fx.status ?? null,
+        })
+      : { code: "TBD", verb: "TBD" as const };
 
     items.push({
       pickId: p.id,
