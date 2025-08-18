@@ -93,16 +93,17 @@ export async function GET() {
       }
     }
 
-    const res = fx
-      ? resultForClub({
-          clubId: p.clubId,
-          homeClubId: fx.homeClubId,
-          awayClubId: fx.awayClubId,
-          homeGoals: fx.homeGoals,
-          awayGoals: fx.awayGoals,
-          status: fx.status ?? null,
-        })
-      : { code: "TBD", verb: "TBD" as const };
+    const res: { code: ResultCode; verb: "won" | "drew" | "lost" | "TBD" } =
+  fx
+    ? resultForClub({
+        clubId: p.clubId,
+        homeClubId: fx.homeClubId,
+        awayClubId: fx.awayClubId,
+        homeGoals: fx.homeGoals,
+        awayGoals: fx.awayGoals,
+        status: fx.status ?? null,
+      })
+    : { code: "TBD", verb: "TBD" };
 
     items.push({
       pickId: p.id,
