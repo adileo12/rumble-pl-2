@@ -1,3 +1,4 @@
+// app/api/rumble/lazarus/activate/route.ts
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { db } from "@/src/lib/db";
@@ -17,7 +18,7 @@ export async function POST() {
   if (!st?.eliminatedAtGw) return NextResponse.json({ ok: false, error: "You are not eliminated" }, { status: 400 });
   if (st.lazarusUsed) return NextResponse.json({ ok: false, error: "Lazarus already used" }, { status: 400 });
 
-  const nextGw = await db.gw.findFirst({
+  const nextGw = await db.gameweek.findFirst({
     where: { seasonId: season.id, number: { gt: st.eliminatedAtGw } },
     orderBy: { number: "asc" },
     select: { id: true, number: true },
@@ -30,7 +31,6 @@ export async function POST() {
     return NextResponse.json({ ok: false, error: "Lazarus window has closed" }, { status: 400 });
   }
 
-  // Revive: clear elimination and mark lazarusUsed = true
   await db.rumbleState.update({
     where: { userId_seasonId: { userId: sid, seasonId: season.id } },
     data: { lazarusUsed: true, eliminatedAtGw: null, eliminatedAt: null },
