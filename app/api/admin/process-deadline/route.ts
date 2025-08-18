@@ -1,95 +1,78 @@
-// app/api/admin/process-deadline/route.ts
+// app/api/admin/process-results/route.ts
 import { NextResponse } from "next/server";
 import { db } from "@/src/lib/db";
-import { computeDeadline, getCurrentSeasonAndGW } from "@/src/lib/rumble";
-import { getOrCreateState } from "@/src/lib/rumble-state";
 
-// POST: auto-pick by proxy for anyone who missed current GW deadline.
-// If proxiesUsed >= 2 -> eliminate at this GW.
-export async function POST() {
-  const { season, gw } = await getCurrentSeasonAndGW();
-  if (!season || !gw) {
-    return NextResponse.json({ ok: false, error: "No active gameweek" }, { status: 400 });
+function gwIsComplete(rows: { status: string | null; homeGoals: number | null; awayGoals: number | null }[]) {
+  if (!rows.length) return false;
+  return rows.every(r => r.status === "FT" && r.homeGoals != null && r.awayGoals != null);
+}
+
+export async function POST(req: Request) {
+  const { seasonId, gwNumber } = await req.json().catch(() => ({} as any));
+  if (!seasonId || typeof gwNumber !== "number") {
+    return NextResponse.json({ ok: false, error: "seasonId and gwNumber are required" }, { status: 400 });
   }
 
-  // Ensure deadline has actually passed
-  const kicks = await db.fixture.findMany({
+  const gw = await db.gw.findFirst({ where: { seasonId, number: gwNumber }, select: { id: true, number: true } });
+  if (!gw) return NextResponse.json({ ok: false, error: "GW not found" }, { status: 404 });
+
+  const fixtures = await db.fixture.findMany({
     where: { gwId: gw.id },
-    select: { kickoff: true },
+    select: { status: true, homeGoals: true, awayGoals: true },
   });
-  const { deadline } = computeDeadline(kicks.map(k => k.kickoff));
-  if (!deadline || Date.now() < deadline.getTime()) {
-    return NextResponse.json({ ok: false, error: "Deadline not yet passed" }, { status: 400 });
+  if (!gwIsComplete(fixtures)) {
+    return NextResponse.json({ ok: false, error: "GW not complete yet" }, { status: 400 });
   }
 
-  // Consider participants = users who picked in any prior GW of this season
-  const priorUsers = await db.pick.findMany({
-    where: { seasonId: season.id, gw: { number: { lt: gw.number } } },
-    distinct: ["userId"],
-    select: { userId: true },
-  });
-  const userIds = priorUsers.map(u => u.userId);
-
-  let proxied = 0, eliminated = 0;
-
-  // Clubs in alphabetical order
-  const clubs = await db.club.findMany({
-    where: { active: true },
-    orderBy: { name: "asc" },
-    select: { id: true, name: true },
+  // Users who picked this GW and are not already eliminated
+  const picks = await db.pick.findMany({
+    where: { gwId: gw.id },
+    select: { id: true, userId: true, clubId: true, seasonId: true },
   });
 
-  for (const uid of userIds) {
-    // Already picked this GW? skip
-    const existing = await db.pick.findFirst({
-      where: { userId: uid, gwId: gw.id },
-      select: { id: true },
+  // Preload all fixtures for quick lookups
+  const fxByClub: Record<string, { homeGoals: number; awayGoals: number; homeClubId: string; awayClubId: string }> = {};
+  const fxAll = await db.fixture.findMany({
+    where: { gwId: gw.id },
+    select: { homeClubId: true, awayClubId: true, homeGoals: true, awayGoals: true },
+  });
+  for (const f of fxAll) {
+    fxByClub[f.homeClubId] = { ...f };
+    fxByClub[f.awayClubId] = { ...f };
+  }
+
+  let eliminated = 0;
+
+  for (const p of picks) {
+    const state = await db.rumbleState.findUnique({
+      where: { userId_seasonId: { userId: p.userId, seasonId: p.seasonId } },
+      select: { eliminatedAtGw: true },
     });
-    if (existing) continue;
+    if (state?.eliminatedAtGw) continue; // already out (e.g., missed with no proxies)
 
-    const state = await getOrCreateState(uid, season.id);
-    if (state.eliminatedAtGw) {
-      // already eliminated earlier
-      continue;
-    }
+    const fx = fxByClub[p.clubId];
+    if (!fx) continue;
 
-    // Find first not-yet-used club alphabetically
-    const used = await db.pick.findMany({
-      where: { userId: uid, seasonId: season.id, gw: { number: { lt: gw.number } } },
-      select: { clubId: true },
-    });
-    const usedSet = new Set(used.map(u => u.clubId));
-    const nextClub = clubs.find(c => !usedSet.has(c.id));
+    const isHome = fx.homeClubId === p.clubId;
+    const my = isHome ? fx.homeGoals : fx.awayGoals;
+    const opp = isHome ? fx.awayGoals : fx.homeGoals;
 
-    if (state.proxiesUsed < 2 && nextClub) {
-      // Auto-pick by proxy and increment proxiesUsed
-      await db.$transaction([
-        db.pick.upsert({
-          where: { userId_gwId: { userId: uid, gwId: gw.id } },
-          update: { clubId: nextClub.id, source: "PROXY" },
-          create: {
-            userId: uid,
-            seasonId: season.id,
-            gwId: gw.id,
-            clubId: nextClub.id,
-            source: "PROXY",
-          },
-        }),
-        db.rumbleState.update({
-          where: { userId_seasonId: { userId: uid, seasonId: season.id } },
-          data: { proxiesUsed: { increment: 1 } },
-        }),
-      ]);
-      proxied++;
-    } else {
-      // No proxies left -> eliminate at this GW
-      await db.rumbleState.update({
-        where: { userId_seasonId: { userId: uid, seasonId: season.id } },
-        data: { eliminatedAtGw: gw.number, eliminatedAt: new Date() },
+    if (my < opp) {
+      await db.rumbleState.upsert({
+        where: { userId_seasonId: { userId: p.userId, seasonId: p.seasonId } },
+        update: { eliminatedAtGw: gw.number, eliminatedAt: new Date() },
+        create: {
+          userId: p.userId,
+          seasonId: p.seasonId,
+          proxiesUsed: 0,
+          lazarusUsed: false,
+          eliminatedAtGw: gw.number,
+          eliminatedAt: new Date(),
+        },
       });
       eliminated++;
     }
   }
 
-  return NextResponse.json({ ok: true, proxied, eliminated, gw: gw.number });
+  return NextResponse.json({ ok: true, eliminated, gw: gw.number });
 }
