@@ -198,3 +198,17 @@ model JokerUsage {
   @@index([gameweekId])
   @@index([clubId])
 }
+
+model RumbleState {
+  id              String   @id @default(cuid())
+  userId          String
+  seasonId        String
+  proxiesUsed     Int      @default(0)  // 0..2
+  lazarusUsed     Boolean  @default(false)
+  eliminatedAtGw  Int?
+  eliminatedAt    DateTime?
+
+  season          Season   @relation(fields: [seasonId], references: [id])
+
+  @@unique([userId, seasonId])
+}
