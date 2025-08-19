@@ -258,7 +258,7 @@ export default function DashboardPage() {
         className="fixed inset-0 -z-10 pointer-events-none opacity-[0.06]"
         style={{
           // ⚠️ Use the SAME filename the Play tab uses. If your file is /haven-logo.png, swap it here.
-          backgroundImage: 'url(/Haven_Logo.png)',
+          backgroundImage: 'url(/haven-logo.png)',
           backgroundRepeat: "no-repeat",
           backgroundPosition: "center",
           backgroundSize: "min(1200px, 90vw)",
