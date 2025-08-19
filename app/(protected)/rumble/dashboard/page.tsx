@@ -251,9 +251,25 @@ function LifelinesPanel() {
 /* ---------- page ---------- */
 export default function DashboardPage() {
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8">
-      <PicksTable />
-      <LifelinesPanel />
+    <div className="relative">
+      {/* Watermark background */}
+      <div
+        aria-hidden
+        className="fixed inset-0 -z-10 pointer-events-none opacity-[0.06]"
+        style={{
+          // ⚠️ Use the SAME filename the Play tab uses. If your file is /haven-logo.png, swap it here.
+          backgroundImage: 'url(/Haven_Logo.png)',
+          backgroundRepeat: "no-repeat",
+          backgroundPosition: "center",
+          backgroundSize: "min(1200px, 90vw)",
+        }}
+      />
+
+      {/* Page content */}
+      <div className="max-w-6xl mx-auto px-4 py-8">
+        <PicksTable />
+        <LifelinesPanel />
+      </div>
     </div>
   );
 }
