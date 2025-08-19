@@ -255,13 +255,14 @@ export default function DashboardPage() {
       {/* Watermark background */}
       <div
         aria-hidden
-        className="fixed inset-0 -z-10 pointer-events-none opacity-[0.06]"
+        className="fixed inset-0 -z-10 pointer-events-none"
         style={{
           // ⚠️ Use the SAME filename the Play tab uses. If your file is /haven-logo.png, swap it here.
           backgroundImage: 'url(/haven-logo.png)',
           backgroundRepeat: "no-repeat",
           backgroundPosition: "center",
-          backgroundSize: "min(1200px, 90vw)",
+          backgroundSize: "contain",
+          opacity: 0.2,
         }}
       />
 
