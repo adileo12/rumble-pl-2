@@ -22,7 +22,7 @@ export async function POST(req: Request) {
     if (!gw) return NextResponse.json({ ok: false, error: 'No gameweek found' }, { status: 400 });
 
     // Enforce lock
-    if (await isLockedForGW(season.id, gw.id)) {
+    if (await isLockedForGW(gw.id)) {
       return NextResponse.json({ ok: false, error: 'Deadline passed for this gameweek' }, { status: 400 });
     }
 
