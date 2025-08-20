@@ -8,40 +8,39 @@ export function toIST(date: Date) {
 }
 
 export async function getActiveSeason() {
-  return db.season.findFirst({ where: { isActive: true } });
+  return prisma.season.findFirstOrThrow({ where: { isActive: true } });
 }
 
 export async function getCurrentGameweek(seasonId: string) {
   // The current GW is the one with the nearest future deadline, or last one if all past.
-  const now = new Date();
-  const future = await db.gameweek.findFirst({
-    where: { seasonId, deadline: { gte: now } },
-    orderBy: { deadline: 'asc' },
-  });
-  if (future) return future;
-
-  // fallback to latest past gw
-  return db.gameweek.findFirst({
-    where: { seasonId },
-    orderBy: { deadline: 'desc' },
+  return prisma.gameweek.findFirstOrThrow({
+    where: { seasonId, isActive: true }, // adjust if you mark with dates instead
+    orderBy: { number: "asc" },
   });
 }
 
-// Lock rule: lock at (first kickoff - 30 min)
-// We derive first kickoff from fixtures for the gw.
-export async function isLockedForGW(seasonId: string, gameweekId: string) {
-  const first = await db.fixture.findFirst({
-    where: {
-      gwId: gameweekId, // field on Fixture
-      gw: { seasonId }, // relation to Gameweek → Season
-    },
-    orderBy: { kickoff: 'asc' },
+
+export async function getGwDeadlineMinusMinutes(
+  gameweekId: string,
+  minutes = 30
+) {
+  // Deadline = first kickoff of the GW minus X minutes
+  const first = await prisma.fixture.findFirst({
+    where: { gameweekId },
+    orderBy: { kickoff: "asc" },
     select: { kickoff: true },
   });
+  if (!first?.kickoff) return null;
+  return new Date(first.kickoff.getTime() - minutes * 60_000);
+}
 
-  if (!first?.kickoff) return false; // no fixtures -> not locked
-  const lockAt = new Date(first.kickoff.getTime() - 30 * 60 * 1000);
-  return new Date() >= lockAt;
+
+// Lock rule: lock at (first kickoff - 30 min)
+// We derive first kickoff from fixtures for the gw.
+export async function isLockedForGW(gameweekId: string) {
+  const deadline = await getGwDeadlineMinusMinutes(gameweekId, 30);
+  if (!deadline) return false; // no fixtures? then not locked
+  return new Date() >= deadline;
 }
 
 export async function clubsYouAlreadyPicked(userId: string, seasonId: string) {
