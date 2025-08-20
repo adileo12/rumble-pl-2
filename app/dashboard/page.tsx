@@ -4,7 +4,7 @@ import { getActiveSeason } from "@/src/lib/game";
 import Link from "next/link";
 
 export default async function Dashboard() {
-  const userId = getUserIdFromCookies();
+  const userId = await getUserIdFromCookies();
   if (!userId) {
     return (
       <div className="p-6">
