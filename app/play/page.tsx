@@ -16,7 +16,7 @@ export default async function PlayPage() {
   const gw = await getCurrentGameweek(season.id);
   if (!gw) return <Section><h1>No gameweek found</h1></Section>;
 
-  const locked = await isLockedForGW(season.id, gw.id);
+  const locked = await isLockedForGW(gw.id);
 
  const fixtures = await db.fixture.findMany({
   where: {
