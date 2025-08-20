@@ -16,20 +16,20 @@ export default async function Dashboard() {
 
   const season = await getActiveSeason();
 
-  // 1) Get picks (no gameweek include)
+  // 1) Get picks (no relation includes needed)
   const picks = await db.pick.findMany({
     where: { userId, seasonId: season.id },
-    include: { club: true },           // <-- keep club; remove gameweek
-    orderBy: { createdAt: "asc" },     // <-- no relation sort; use createdAt
+    include: { club: true },
+    orderBy: { createdAt: "asc" },
   });
 
-  // 2) Load GW numbers for the set of IDs
-  const gwIds = Array.from(new Set(picks.map(p => p.gameweekId)));
+  // 2) Load GW numbers for the set of gwIds
+  const gwIds = Array.from(new Set(picks.map((p) => p.gwId)));
   const gws = await db.gameweek.findMany({
     where: { id: { in: gwIds } },
     select: { id: true, number: true },
   });
-  const gwNumberById = new Map(gws.map(g => [g.id, g.number]));
+  const gwNumberById = new Map(gws.map((g) => [g.id, g.number]));
 
   return (
     <div className="p-6">
@@ -51,7 +51,7 @@ export default async function Dashboard() {
             <tbody>
               {picks.map((p) => (
                 <tr key={p.id} className="border-t">
-                  <td className="px-3 py-2">GW {gwNumberById.get(p.gameweekId) ?? "?"}</td>
+                  <td className="px-3 py-2">GW {gwNumberById.get(p.gwId) ?? "?"}</td>
                   <td className="px-3 py-2">{p.club?.shortName ?? p.club?.name ?? p.clubId}</td>
                   <td className="px-3 py-2">
                     {p.createdAt instanceof Date ? p.createdAt.toLocaleString() : String(p.createdAt)}
