@@ -1,4 +1,4 @@
-import { db } from './db';
+import { db } from "@/src/lib/db";
 
 // IST offset helper
 export function toIST(date: Date) {
@@ -8,12 +8,12 @@ export function toIST(date: Date) {
 }
 
 export async function getActiveSeason() {
-  return prisma.season.findFirstOrThrow({ where: { isActive: true } });
+  return db.season.findFirstOrThrow({ where: { isActive: true } });
 }
 
 export async function getCurrentGameweek(seasonId: string) {
   // The current GW is the one with the nearest future deadline, or last one if all past.
-  return prisma.gameweek.findFirstOrThrow({
+  return db.gameweek.findFirstOrThrow({
     where: { seasonId, isActive: true }, // adjust if you mark with dates instead
     orderBy: { number: "asc" },
   });
@@ -25,8 +25,8 @@ export async function getGwDeadlineMinusMinutes(
   minutes = 30
 ) {
   // Deadline = first kickoff of the GW minus X minutes
-  const first = await prisma.fixture.findFirst({
-    where: { gameweekId },
+  const first = await db.fixture.findFirst({
+    where: { gwId },
     orderBy: { kickoff: "asc" },
     select: { kickoff: true },
   });
@@ -38,7 +38,7 @@ export async function getGwDeadlineMinusMinutes(
 // Lock rule: lock at (first kickoff - 30 min)
 // We derive first kickoff from fixtures for the gw.
 export async function isLockedForGW(gameweekId: string) {
-  const deadline = await getGwDeadlineMinusMinutes(gameweekId, 30);
+  const deadline = await getGwDeadlineMinusMinutes(gwId, 30);
   return deadline ? new Date() >= deadline : false;
 }
 
