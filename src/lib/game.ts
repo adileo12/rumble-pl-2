@@ -39,8 +39,7 @@ export async function getGwDeadlineMinusMinutes(
 // We derive first kickoff from fixtures for the gw.
 export async function isLockedForGW(gameweekId: string) {
   const deadline = await getGwDeadlineMinusMinutes(gameweekId, 30);
-  if (!deadline) return false; // no fixtures? then not locked
-  return new Date() >= deadline;
+  return deadline ? new Date() >= deadline : false;
 }
 
 export async function clubsYouAlreadyPicked(userId: string, seasonId: string) {
