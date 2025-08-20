@@ -4,7 +4,7 @@ import { getActiveSeason } from "@/src/lib/game";
 import Link from "next/link";
 
 export default async function Dashboard() {
-  const userId = await getUserIdFromCookies();
+  const userId = getUserIdFromCookies();
   if (!userId) {
     return (
       <div className="p-6">
@@ -15,11 +15,21 @@ export default async function Dashboard() {
   }
 
   const season = await getActiveSeason();
+
+  // 1) Get picks (no gameweek include)
   const picks = await db.pick.findMany({
     where: { userId, seasonId: season.id },
-    include: { club: true, gameweek: true },
-    orderBy: [{ gameweek: { number: "asc" } }],
+    include: { club: true },           // <-- keep club; remove gameweek
+    orderBy: { createdAt: "asc" },     // <-- no relation sort; use createdAt
   });
+
+  // 2) Load GW numbers for the set of IDs
+  const gwIds = Array.from(new Set(picks.map(p => p.gameweekId)));
+  const gws = await db.gameweek.findMany({
+    where: { id: { in: gwIds } },
+    select: { id: true, number: true },
+  });
+  const gwNumberById = new Map(gws.map(g => [g.id, g.number]));
 
   return (
     <div className="p-6">
@@ -41,24 +51,18 @@ export default async function Dashboard() {
             <tbody>
               {picks.map((p) => (
                 <tr key={p.id} className="border-t">
-                  <td className="px-3 py-2">GW {p.gameweek.number}</td>
-                  <td className="px-3 py-2">{p.club.shortName ?? p.club.name}</td>
-                  <td className="px-3 py-2">{p.createdAt.toLocaleString()}</td>
+                  <td className="px-3 py-2">GW {gwNumberById.get(p.gameweekId) ?? "?"}</td>
+                  <td className="px-3 py-2">{p.club?.shortName ?? p.club?.name ?? p.clubId}</td>
                   <td className="px-3 py-2">
-                    {/* TODO: compute W/L/FT from fixtures later */}
-                    TBD
+                    {p.createdAt instanceof Date ? p.createdAt.toLocaleString() : String(p.createdAt)}
                   </td>
+                  <td className="px-3 py-2">TBD</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
-
-      {/* Optional Undo (only works before deadline) */}
-      <form action="/api/picks/delete" method="post" className="mt-4">
-        <button className="rounded-md border px-3 py-2 text-sm">Undo current GW pick</button>
-      </form>
     </div>
   );
 }
