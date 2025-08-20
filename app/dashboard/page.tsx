@@ -15,7 +15,7 @@ export default async function Dashboard() {
   }
 
   const season = await getActiveSeason();
-  const picks = await prisma.pick.findMany({
+  const picks = await db.pick.findMany({
     where: { userId, seasonId: season.id },
     include: { club: true, gameweek: true },
     orderBy: [{ gameweek: { number: "asc" } }],
