@@ -1,12 +1,12 @@
+// src/lib/auth.ts
 import { cookies } from "next/headers";
 
+/**
+ * Returns the authenticated userId from cookies, or null if not logged in.
+ * Accepts either "sid" or "rumble_session".
+ * Sync version (no DB lookup) – works if the cookie stores userId directly.
+ */
 export function getUserIdFromCookies(): string | null {
   const jar = cookies();
   return jar.get("sid")?.value ?? jar.get("rumble_session")?.value ?? null;
-}
-
-  // If you store userId directly in the cookie, return it here.
-  // Otherwise, look up a session row by sid.
-  const session = await prisma.session.findUnique({ where: { id: sid } }).catch(() => null);
-  return session?.userId ?? null;
 }
