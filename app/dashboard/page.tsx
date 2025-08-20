@@ -1,4 +1,4 @@
-import { prisma } from "@/src/lib/db";
+import { db } from "@/src/lib/db";
 import { getUserIdFromCookies } from "@/src/lib/auth";
 import { getActiveSeason } from "@/src/lib/game";
 import Link from "next/link";
