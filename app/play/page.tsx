@@ -16,7 +16,7 @@ export default async function PlayPage() {
   const gw = await getCurrentGameweek(season.id);
   if (!gw) return <Section><h1>No gameweek found</h1></Section>;
 
-  const locked = await isLockedForGW(season.id, gw.id);
+  const locked = await isLockedForGW(gw.id);
 
  const fixtures = await db.fixture.findMany({
   where: {
@@ -41,7 +41,7 @@ export default async function PlayPage() {
       <header className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Rumble — Gameweek {gw.number}</h1>
-          <p className="text-sm text-gray-600">Deadline (IST): {toIST(firstKickoffMinus30(fixtures)).toLocaleString('en-IN')}</p>
+          <p className="text-sm text-gray-600">Deadline (IST): {toIST(firstKickoffMinus30(fixtures))}</p>
         </div>
         <div>
           <Link className="underline text-sm" href="/leaderboard">Leaderboard</Link>
@@ -55,7 +55,7 @@ export default async function PlayPage() {
           {fixtures.length === 0 && <li className="text-sm text-gray-600">No fixtures found for this GW.</li>}
           {fixtures.map(f => (
             <li key={f.id} className="text-sm">
-              {fmtTeam(f.homeClubId, clubs)} vs {fmtTeam(f.awayClubId, clubs)} — {f.kickoff ? toIST(new Date(f.kickoff)).toLocaleString('en-IN') : 'TBD'}
+              {fmtTeam(f.homeClubId, clubs)} vs {fmtTeam(f.awayClubId, clubs)} — {f.kickoff ? toIST(new Date(f.kickoff)) : 'TBD'}
             </li>
           ))}
         </ul>

@@ -1,57 +1,67 @@
-export const runtime = 'nodejs';
-import { cookies } from 'next/headers';
-import { NextResponse } from 'next/server';
-import { db } from '@/src/lib/db';
-import { getActiveSeason, getCurrentGameweek, isLockedForGW, clubsYouAlreadyPicked } from '@/src/lib/game';
+export const runtime = "nodejs";
+import { cookies } from "next/headers";
+import { NextResponse } from "next/server";
+import { db } from "@/src/lib/db";
+import {
+  getActiveSeason,
+  getCurrentGameweek,
+  isLockedForGW,
+  clubsYouAlreadyPicked,
+} from "@/src/lib/game";
 
 export async function POST(req: Request) {
   try {
-    const userId = cookies().get('rumble_session')?.value;
-    if (!userId) return NextResponse.json({ ok: false, error: 'Not logged in' }, { status: 401 });
+    const jar = cookies();
+    const userId = jar.get("sid")?.value ?? jar.get("rumble_session")?.value;
+    if (!userId) return NextResponse.json({ ok: false, error: "Not logged in" }, { status: 401 });
 
     const { clubId } = await req.json().catch(() => ({}));
-    if (!clubId) return NextResponse.json({ ok: false, error: 'clubId required' }, { status: 400 });
+    if (!clubId) return NextResponse.json({ ok: false, error: "clubId required" }, { status: 400 });
 
     const user = await db.user.findUnique({ where: { id: userId } });
-    if (!user || !user.alive) return NextResponse.json({ ok: false, error: 'User not found or eliminated' }, { status: 400 });
+    if (!user || !user.alive) {
+      return NextResponse.json({ ok: false, error: "User not found or eliminated" }, { status: 400 });
+    }
 
     const season = await getActiveSeason();
-    if (!season) return NextResponse.json({ ok: false, error: 'No active season' }, { status: 400 });
-
     const gw = await getCurrentGameweek(season.id);
-    if (!gw) return NextResponse.json({ ok: false, error: 'No gameweek found' }, { status: 400 });
 
-    // Enforce lock
-    if (await isLockedForGW(season.id, gw.id)) {
-      return NextResponse.json({ ok: false, error: 'Deadline passed for this gameweek' }, { status: 400 });
+    if (await isLockedForGW(gw.id)) {
+      return NextResponse.json({ ok: false, error: "DEADLINE_PASSED" }, { status: 409 });
     }
 
-    // Enforce once-per-club
+    const playsThisGw = await db.fixture.count({
+      where: {
+        gwId: gw.id, // <-- use your field
+        OR: [{ homeClubId: clubId }, { awayClubId: clubId }],
+      },
+    });
+    if (playsThisGw === 0) {
+      return NextResponse.json({ ok: false, error: "CLUB_NOT_IN_THIS_GW" }, { status: 400 });
+    }
+
     const used = await clubsYouAlreadyPicked(user.id, season.id);
     if (used.has(clubId)) {
-      return NextResponse.json({ ok: false, error: 'You already used this club this season' }, { status: 400 });
+      return NextResponse.json({ ok: false, error: "CLUB_ALREADY_USED" }, { status: 409 });
     }
 
-    // Upsert pick for this GW (allow change before lock)
     const pick = await db.pick.upsert({
-  where: {
-    userId_seasonId_gwId: {
-      userId: user.id,
-      seasonId: season.id,
-      gwId: gw.id,
-    },
-  },
-  update: { clubId },
-  create: {
-    userId: user.id,
-    seasonId: season.id,
-    gwId: gw.id,
-    clubId,
-  },
-});
+      where: {
+        // requires @@unique([userId, seasonId, gwId]) in Prisma
+        userId_seasonId_gwId: {
+          userId: user.id,
+          seasonId: season.id,
+          gwId: gw.id,
+        },
+      },
+      update: { clubId },
+      create: { userId: user.id, seasonId: season.id, gwId: gw.id, clubId },
+      include: { club: true },
+    });
 
     return NextResponse.json({ ok: true, pick });
-  } catch (e:any) {
+  } catch (e: any) {
+    console.error(e);
     return NextResponse.json({ ok: false, error: e.message || String(e) }, { status: 500 });
   }
 }
