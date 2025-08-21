@@ -81,4 +81,113 @@ function AdminInner() {
       <h3 className="text-sm font-semibold text-gray-500 mb-2">Rumble</h3>
       <ul className="space-y-1">
         <li>
-          <
+          <button
+            className={`w-full text-left px-3 py-2 rounded ${
+              section === "game-sync" ? "bg-gray-100" : "hover:bg-gray-50"
+            }`}
+            onClick={() => setSection("game-sync")}
+          >
+            Game Sync
+          </button>
+        </li>
+        <li>
+          <button
+            className={`w-full text-left px-3 py-2 rounded ${
+              section === "reports" ? "bg-gray-100" : "hover:bg-gray-50"
+            }`}
+            onClick={() => setSection("reports")}
+          >
+            Report Generation
+          </button>
+        </li>
+      </ul>
+    </aside>
+  );
+
+  // ---- Rumble content ----
+  const rumbleContent = useMemo(() => {
+    if (section === "reports") {
+      return (
+        <div className="flex-1">
+          <h2 className="text-xl font-semibold mb-4">Report Generation</h2>
+          <div className="grid gap-4 max-w-xl">
+            <div className="border rounded p-4">
+              <h3 className="font-medium mb-2">Process Gameweek Results</h3>
+              <div className="flex gap-2 mb-2">
+                <input
+                  value={seasonId}
+                  onChange={(e) => setSeasonId(e.target.value)}
+                  placeholder="Season ID"
+                  className="border rounded px-3 py-2 w-72"
+                />
+                <input
+                  type="number"
+                  value={gwNumber}
+                  onChange={(e) => setGwNumber(Number(e.target.value))}
+                  placeholder="GW number"
+                  className="border rounded px-3 py-2 w-32"
+                />
+              </div>
+              <Button onClick={processResults}>Run</Button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Default: Game Sync
+    return (
+      <div className="flex-1">
+        <h2 className="text-xl font-semibold mb-4">Game Sync</h2>
+        <div className="flex gap-3">
+          <Button onClick={seedClubs}>Seed Clubs</Button>
+          <Button onClick={syncFixtures}>Sync Fixtures</Button>
+        </div>
+        <p className="mt-3 text-sm text-gray-600">
+          1) Seed → 2) Sync Fixtures → verify at <code>/api/status</code>.
+        </p>
+      </div>
+    );
+  }, [gwNumber, processResults, seasonId, section, seedClubs, syncFixtures]);
+
+  return (
+    <main>
+      {tab === "rumble" && (
+        <div className="flex">
+          {rumbleSidebar}
+          <section className="pl-6 flex-1">{rumbleContent}</section>
+        </div>
+      )}
+
+      {tab === "predictor" && (
+        <section>
+          <h2 className="text-xl font-semibold mb-2">Predictor</h2>
+          <p className="text-gray-600">
+            Coming soon: sync matches, recalc scores, export CSV…
+          </p>
+        </section>
+      )}
+
+      {tab === "site" && (
+        <section>
+          <h2 className="text-xl font-semibold mb-2">Site Settings</h2>
+          <p className="text-gray-600">
+            Coming soon: maintenance mode, banner text, feature flags…
+          </p>
+        </section>
+      )}
+
+      <pre className="mt-6 bg-gray-50 p-3 rounded text-xs whitespace-pre-wrap">
+        {msg}
+      </pre>
+    </main>
+  );
+}
+
+export default function Page() {
+  return (
+    <Suspense fallback={<div className="p-4 text-sm text-gray-600">Loading…</div>}>
+      <AdminInner />
+    </Suspense>
+  );
+}
