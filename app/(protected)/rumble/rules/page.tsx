@@ -55,7 +55,7 @@ export default async function RulesHelpPage() {
       <Section id="picks-rules" title="Picks Rules">
         <ul className="list-disc ml-5 text-sm space-y-2">
           <li><b>One club per season:</b> once you’ve used a club, you cannot pick it again this season.</li>
-          <li><b>Result to survive:</b> Default is <i>win required</i>. A draw or loss eliminates you
+          <li><b>Result to survive:</b> Default is <i>win or draw required</i>. A loss eliminates you
               (if your league uses different logic, the admin can clarify).</li>
           <li>Picks are recorded per GW; we hide active-GW picks until the deadline passes.</li>
         </ul>
