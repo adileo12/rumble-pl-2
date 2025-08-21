@@ -30,7 +30,7 @@ export default async function RulesHelpPage() {
       <Section id="overview" title="Overview">
         <p className="text-sm">
           Rumble is a weekly Premier League survivor game. Each Gameweek (GW) you pick one club.
-          If your club <b>wins</b>, you stay alive for the next GW. You cannot reuse a club in the same season.
+          If your club <b>wins or Draws</b>, you stay alive for the next GW. You cannot reuse a club in the same season.
           The last player alive wins.
         </p>
       </Section>
