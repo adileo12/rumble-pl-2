@@ -36,9 +36,13 @@ export default async function LeaderboardPage() {
     : 0;
 
   // Pull users & picks
-  const users = (await db.user.findMany({ orderBy: { id: "asc" } })) as any[];
+  const users = (await db.user.findMany({
+  where: { isAdmin: false },
+  orderBy: { id: "asc" },
+})) as any[];
+
 const picks = await db.pick.findMany({
-  where: { seasonId: season.id },
+  where: { seasonId: season.id, user: { isAdmin: false } }, // relational filter
   include: { club: true },
 });
 
