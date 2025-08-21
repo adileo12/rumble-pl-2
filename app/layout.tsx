@@ -2,6 +2,9 @@ import "./globals.css";
 import Image from "next/image";
 import Link from "next/link";
 
+export const revalidate = false;
+export const dynamic = "force-dynamic";
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
@@ -35,3 +38,5 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     </html>
   );
 }
+
+console.log("[tripwire] app/layout.tsx -> revalidate =", revalidate, "dynamic =", dynamic ?? "(none)");
