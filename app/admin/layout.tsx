@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import React from "react";
 
 export const dynamic = "force-dynamic";
-export const revalidate = 0;
+export const revalidate = false;
 
 const TABS = [
   { key: "rumble", label: "Rumble" },
@@ -33,9 +33,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               href={href}
               className={
                 "px-4 py-2 -mb-px border-b-2 " +
-                (active
-                  ? "border-black font-medium"
-                  : "border-transparent text-gray-500 hover:text-black")
+                (active ? "border-black font-medium" : "border-transparent text-gray-500 hover:text-black")
               }
             >
               {t.label}
