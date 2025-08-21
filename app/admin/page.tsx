@@ -8,6 +8,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 export const dynamic = "force-dynamic";
 export const revalidate = false;
 
+console.log("[tripwire] app/admin/page.tsx -> revalidate =", revalidate, "dynamic =", dynamic);
+
 function Button({
   onClick,
   children,
