@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 // Opt out of SSG/prerender + caching
 export const dynamic = "force-dynamic";
 export const revalidate = false;
+export const runtime = "nodejs";
 
 console.log("[tripwire] app/admin/page.tsx -> revalidate =", revalidate, "dynamic =", dynamic);
 
