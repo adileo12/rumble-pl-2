@@ -70,3 +70,21 @@ export async function clubsYouAlreadyPicked(userId: string, seasonId: string) {
   });
   return new Set(rows.map((r) => r.clubId));
 }
+
+/** Format a date/time in IST (Asia/Kolkata). */
+export function toIST(
+  date: Date | string | number,
+  opts: Intl.DateTimeFormatOptions = {}
+): string {
+  const d = date instanceof Date ? date : new Date(date);
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+    ...opts,
+  }).format(d);
+}
+
