@@ -36,13 +36,11 @@ export default async function LeaderboardPage() {
     : 0;
 
   // Pull users & picks
-  const [users, picks] = await Promise.all([
-    db.user.findMany({ orderBy: { id: "asc" } }) as any[],
-    db.pick.findMany({
-      where: { seasonId: season.id },
-      include: { club: true },
-    }),
-  ]);
+  const users = (await db.user.findMany({ orderBy: { id: "asc" } })) as any[];
+const picks = await db.pick.findMany({
+  where: { seasonId: season.id },
+  include: { club: true },
+});
 
   // Only include picks from locked GWs
   const displayPicks = picks.filter((p) => lockedGwIds.has(p.gwId as string));
