@@ -4,31 +4,48 @@ import { getActiveSeason, getCurrentGameweek } from "@/src/lib/game";
 
 export default async function LeaderboardPage() {
   const season = await getActiveSeason();
-  const currentGw = await getCurrentGameweek(season.id);
+  const currentGw = await getCurrentGameweek(season.id); // still useful, but we won't rely on number<current
 
-  // All GWs in this season, map id -> number
+  // All GWs in this season (id <-> number maps)
   const gws = await db.gameweek.findMany({
     where: { seasonId: season.id },
     select: { id: true, number: true },
     orderBy: { number: "asc" },
   });
   const gwNumberById = new Map(gws.map((g) => [g.id, g.number]));
-  const displayGwNumbers = gws.map((g) => g.number).filter((n) => n < currentGw.number);
 
-  // Users (we'll derive display name + lifeline flags from possible fields)
-  const users = (await db.user.findMany({ orderBy: { id: "asc" } })) as any[];
-
-  // All picks for the season (we'll filter to past GWs only)
-  const picks = await db.pick.findMany({
-    where: { seasonId: season.id },
-    include: { club: true },
+  // Determine which GWs are LOCKED (deadline passed = earliest kickoff <= now + 30m)
+  const earliest = await db.fixture.groupBy({
+    by: ["gwId"],
+    where: { gwId: { in: gws.map((g) => g.id) } },
+    _min: { kickoff: true },
   });
+  const nowPlus30 = new Date(Date.now() + 30 * 60 * 1000);
+  const lockedGwIds = new Set(
+    earliest
+      .filter((e) => e._min.kickoff && e._min.kickoff <= nowPlus30)
+      .map((e) => e.gwId as string)
+  );
 
-  // Keep only picks from GWs strictly before the current (hide active GW)
-  const displayPicks = picks.filter((p) => {
-    const n = gwNumberById.get(p.gwId as string);
-    return n !== undefined && n < currentGw.number;
-  });
+  // Only show columns for GWs whose deadline has passed
+  const displayGwNumbers = gws
+    .filter((g) => lockedGwIds.has(g.id))
+    .map((g) => g.number);
+  const lastDisplayedGw = displayGwNumbers.length
+    ? displayGwNumbers[displayGwNumbers.length - 1]
+    : 0;
+
+  // Pull users & picks
+  const [users, picks] = await Promise.all([
+    db.user.findMany({ orderBy: { id: "asc" } }) as any[],
+    db.pick.findMany({
+      where: { seasonId: season.id },
+      include: { club: true },
+    }),
+  ]);
+
+  // Only include picks from locked GWs
+  const displayPicks = picks.filter((p) => lockedGwIds.has(p.gwId as string));
 
   // Build: userId -> (gwNumber -> label)
   const picksByUser = new Map<string, Map<number, string>>();
@@ -36,21 +53,12 @@ export default async function LeaderboardPage() {
     const gwNum = gwNumberById.get(p.gwId as string);
     if (!gwNum) continue;
     const label = p.club?.shortName ?? p.club?.name ?? p.clubId;
-    const m = picksByUser.get(p.userId) ?? new Map<number, string>();
-    if (!picksByUser.has(p.userId)) picksByUser.set(p.userId, m);
-    m.set(gwNum, label);
-  }
-
-  function displayName(u: any) {
-    const full = [u.firstName, u.lastName].filter(Boolean).join(" ");
-    return full || u.fullName || u.name || u.email || u.id;
-  }
-
-  function used(u: any, keys: string[]) {
-    for (const k of keys) {
-      if (typeof u?.[k] === "boolean") return Boolean(u[k]);
+    let m = picksByUser.get(p.userId);
+    if (!m) {
+      m = new Map<number, string>();
+      picksByUser.set(p.userId, m);
     }
-    return false;
+    m.set(gwNum, label);
   }
 
   const aliveUsers = users.filter((u) => u.alive === true);
@@ -61,7 +69,7 @@ export default async function LeaderboardPage() {
       <header>
         <h1 className="text-2xl font-semibold">Leaderboard</h1>
         <p className="text-sm text-gray-600">
-          Showing picks up to GW {Math.max(0, currentGw.number - 1)}
+          Showing picks up to GW {lastDisplayedGw}
           {displayGwNumbers.length === 0 ? " (no past GWs yet)" : ""}
         </p>
       </header>
@@ -123,8 +131,8 @@ function LeaderboardTable({
           {rows.map((u) => {
             const pickMap = picksByUser.get(u.id) ?? new Map<number, string>();
             const name = displayName(u);
-            const proxy = used(u, ["proxyUsed", "usedProxy", "hasUsedProxy"]);
-            const lazarus = used(u, ["lazarusUsed", "usedLazarus", "hasUsedLazarus"]);
+            const proxy = lifelineUsed(u, ["proxyUsed", "usedProxy", "hasUsedProxy"]);
+            const lazarus = lifelineUsed(u, ["lazarusUsed", "usedLazarus", "hasUsedLazarus"]);
             return (
               <tr key={u.id} className="border-t">
                 <td className="px-3 py-2 whitespace-nowrap">{name}</td>
@@ -149,7 +157,7 @@ function displayName(u: any) {
   return full || u.fullName || u.name || u.email || u.id;
 }
 
-function used(u: any, keys: string[]) {
+function lifelineUsed(u: any, keys: string[]) {
   for (const k of keys) {
     if (typeof u?.[k] === "boolean") return Boolean(u[k]);
   }
