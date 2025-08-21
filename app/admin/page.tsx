@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = false;
 export const runtime = "nodejs";
 
-console.log("[tripwire] app/admin/page.tsx -> revalidate =", revalidate, "dynamic =", dynamic);
+console.log("[/admin] dynamic =", dynamic, "revalidate =", revalidate, "runtime =", (globalThis as any).runtime ?? "(unset)");
 
 function Button({
   onClick,
