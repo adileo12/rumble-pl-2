@@ -1,6 +1,9 @@
 export const dynamic = 'force-dynamic';
 export const revalidate = false;
 
+console.log("[tripwire] app/(protected)/layout.tsx -> revalidate =", revalidate);
+
+
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { db } from "@/src/lib/db";
@@ -24,4 +27,3 @@ export default async function ProtectedLayout({ children }: { children: React.Re
   );
 }
 
-console.log("[tripwire] app/(protected)/layout.tsx -> revalidate =", revalidate);
