@@ -1,14 +1,11 @@
-// app/admin/page.tsx
 "use client";
 
 import React, { Suspense, useCallback, useMemo, useState } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 export const dynamic = "force-dynamic";
-export const revalidate = false;
+export const revalidate = false as const;
 export const runtime = "nodejs";
-
-console.log("[tripwire] admin/page -> typeof revalidate =", typeof revalidate, "; value =", revalidate);
 
 function Button({
   onClick,
