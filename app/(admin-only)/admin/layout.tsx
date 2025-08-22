@@ -1,10 +1,11 @@
 "use client";
 
+import React from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
 export const dynamic = "force-dynamic";
-export const revalidate = false;
+export const revalidate = false as const;
 export const runtime = "nodejs";
 
 const TABS = [
