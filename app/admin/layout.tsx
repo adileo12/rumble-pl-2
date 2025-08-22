@@ -8,6 +8,8 @@ export const dynamic = "force-dynamic";
 export const revalidate = false;
 export const runtime = "nodejs";
 
+console.log("[tripwire] admin/layout -> typeof revalidate =", typeof revalidate, "; value =", revalidate);
+
 const TABS = [
   { key: "rumble", label: "Rumble" },
   { key: "predictor", label: "Predictor" },
