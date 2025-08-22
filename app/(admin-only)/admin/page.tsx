@@ -1,16 +1,12 @@
 // app/admin/page.tsx
 "use client";
 
-import { Suspense, useCallback, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import React, { Suspense, useCallback, useMemo, useState } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 
-// Opt out of SSG/prerender + caching
 export const dynamic = "force-dynamic";
-export const revalidate: false | 0 | 60 | 300 = false;
+export const revalidate = false;
 export const runtime = "nodejs";
-export default function GroupLayout({ children }: { children: React.ReactNode }) {
-  return children;
-}
 
 console.log("[tripwire] admin/page -> typeof revalidate =", typeof revalidate, "; value =", revalidate);
 
