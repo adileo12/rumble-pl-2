@@ -7,7 +7,7 @@ export default function AdminError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  console.error("[/admin error]", error); // shows stack in Vercel logs
+  console.error("[/admin error]", error); // full stack goes to Vercel Functions logs
   return (
     <div className="p-6 space-y-3">
       <h2 className="text-lg font-semibold">Something went wrong on /admin</h2>
