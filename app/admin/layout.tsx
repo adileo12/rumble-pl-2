@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import React from "react";
 
 export const dynamic = "force-dynamic";
-export const revalidate = false;
+export const revalidate: false | 0 | 60 | 300 = false;
 export const runtime = "nodejs";
 
 console.log("[tripwire] admin/layout -> typeof revalidate =", typeof revalidate, "; value =", revalidate);
