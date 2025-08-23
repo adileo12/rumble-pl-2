@@ -6,11 +6,20 @@ import { eliminationSVG } from "@/src/lib/svg";
 import { db } from "@/src/lib/db";
 import { requireAdmin } from "@/src/lib/auth";
 
+function assertCronAuth(req: NextRequest) {
+  const expected = process.env.CRON_SECRET;
+  const auth = req.headers.get("authorization");
+  if (expected && auth !== `Bearer ${expected}`) {
+    throw new Error("Unauthorized");
+  }
+}
+
 export const dynamic = "force-dynamic";
 export const revalidate = false;
 
-export async function POST(req: Request) {
-  await requireAdmin();
+export async function POST(req: NextRequest) {
+  // ✨ protect the endpoint (optional in dev if no CRON_SECRET is set)
+  assertCronAuth(req);
 
   const { seasonId, gwNumber } = await req.json();
   if (!seasonId || typeof gwNumber !== "number") {
