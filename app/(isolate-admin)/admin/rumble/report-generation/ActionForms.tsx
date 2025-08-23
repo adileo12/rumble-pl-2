@@ -16,6 +16,8 @@ function SubmitButton({ children, disabled }: { children: React.ReactNode; disab
   );
 }
 
+type AnyServerAction = (state: ActionState, formData: FormData) => ActionState | Promise<ActionState>;
+
 export default function ActionForms(props: {
   seasons: string[];
   secretConfigured: boolean;
@@ -24,14 +26,12 @@ export default function ActionForms(props: {
 }) {
   const { seasons, secretConfigured, generateGwReportAction, sweepMissingReportsAction } = props;
 
-  const [gwState, gwAction] = useFormState<ActionState>(generateGwReportAction, {
-    ok: false,
-    message: "",
-  });
-  const [sweepState, sweepAction] = useFormState<ActionState>(sweepMissingReportsAction, {
-    ok: false,
-    message: "",
-  });
+  // ---- Type shim to satisfy older react-dom typings ----
+  const gwActionTyped = generateGwReportAction as unknown as AnyServerAction;
+  const sweepActionTyped = sweepMissingReportsAction as unknown as AnyServerAction;
+
+  const [gwState, gwAction] = useFormState(gwActionTyped, { ok: false, message: "" });
+  const [sweepState, sweepAction] = useFormState(sweepActionTyped, { ok: false, message: "" });
 
   const defaultSeason = seasons[0] ?? "";
 
@@ -59,6 +59,7 @@ export default function ActionForms(props: {
               defaultValue={defaultSeason}
               className="w-full rounded-lg border px-3 py-2"
               required
+              disabled={!secretConfigured}
             >
               {seasons.map((id) => (
                 <option key={id} value={id}>
@@ -76,12 +77,13 @@ export default function ActionForms(props: {
               className="w-full rounded-lg border px-3 py-2"
               defaultValue={1}
               required
+              disabled={!secretConfigured}
             />
           </div>
         </div>
 
         <div className="mt-4">
-          <SubmitButton>Run</SubmitButton>
+          <SubmitButton disabled={!secretConfigured}>Run</SubmitButton>
         </div>
 
         {gwState.message && (
@@ -92,7 +94,6 @@ export default function ActionForms(props: {
 
         <p className="mt-3 text-xs text-gray-500">
           Calls <code>/api/admin/reports/gw/generate</code> with server secret.
-          Check Functions → Logs if errors persist.
         </p>
       </form>
 
@@ -101,7 +102,7 @@ export default function ActionForms(props: {
         <h2 className="mb-4 text-xl font-medium">Generate Missing Reports</h2>
         <p className="text-sm text-gray-600">Sweeps gameweeks (last ~36h) and creates any missing reports.</p>
         <div className="mt-4">
-          <SubmitButton>Sweep Now</SubmitButton>
+          <SubmitButton disabled={!secretConfigured}>Sweep Now</SubmitButton>
         </div>
 
         {sweepState.message && (
