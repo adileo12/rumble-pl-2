@@ -1,6 +1,6 @@
 import React from "react";
 import { db } from "@/src/lib/db";
-import ActionForms from "./ActionForms";
+import { GwForm, SweepForm } from "./ActionForms";
 import { generateGwReportAction, sweepMissingReportsAction } from "./actions";
 
 export const dynamic = "force-dynamic";
