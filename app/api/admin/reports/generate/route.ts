@@ -1,5 +1,8 @@
 // app/api/admin/reports/generate/route.ts
 import { NextResponse } from "next/server";
+import { ensureGWReadyForAB, ensureGWReadyForC, fetchClubCounts, fetchSourceCounts, fetchEliminatedNames } from "@/src/lib/reports";
+import { quickChartUrl } from "@/src/lib/quickchart";
+import { eliminationSVG } from "@/src/lib/svg";
 import { db } from "@/src/lib/db";
 
 export const dynamic = "force-dynamic";
