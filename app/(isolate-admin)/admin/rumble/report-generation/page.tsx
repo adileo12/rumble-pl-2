@@ -6,7 +6,7 @@ import { headers } from "next/headers";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-// Build an absolute origin from the current request (works locally & on Vercel)
+// Build an absolute origin from the current request (works on Vercel and locally)
 function getOrigin(): string {
   const envBase = process.env.NEXT_PUBLIC_BASE_URL?.trim();
   if (envBase) return envBase.replace(/\/+$/, "");
@@ -23,24 +23,37 @@ async function generateGwReport(formData: FormData) {
   "use server";
   const seasonId = String(formData.get("seasonId") ?? "").trim();
   const gwNumber = Number(formData.get("gwNumber") ?? NaN);
+  const secret = process.env.CRON_SECRET ?? "";
+
+  if (!secret) {
+    console.error("CRON_SECRET is not set; refusing to call API");
+    return;
+  }
   if (!seasonId || Number.isNaN(gwNumber)) {
-    throw new Error("seasonId and gwNumber are required");
+    console.error("seasonId and gwNumber are required");
+    return;
   }
 
-  const origin = getOrigin();
-  const res = await fetch(`${origin}/api/admin/reports/gw/generate`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${process.env.CRON_SECRET ?? ""}`,
-    },
-    body: JSON.stringify({ seasonId, gwNumber }),
-    cache: "no-store",
-  });
+  try {
+    const origin = getOrigin();
+    const res = await fetch(`${origin}/api/admin/reports/gw/generate`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${secret}`,
+      },
+      body: JSON.stringify({ seasonId, gwNumber }),
+      cache: "no-store",
+    });
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`GW generate failed (${res.status}) -> ${text || "no body"}`);
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      console.error(`GW generate failed (${res.status}) -> ${text}`);
+      return;
+    }
+  } catch (e) {
+    console.error("GW generate exception:", e);
+    return;
   }
 
   revalidatePath("/admin/rumble/report-generation");
@@ -48,18 +61,27 @@ async function generateGwReport(formData: FormData) {
 
 async function generateMissing() {
   "use server";
-  const origin = getOrigin();
-  const res = await fetch(`${origin}/api/admin/reports/generate`, {
-    method: "GET",
-    headers: { authorization: `Bearer ${process.env.CRON_SECRET ?? ""}` },
-    cache: "no-store",
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`Sweep failed (${res.status}) -> ${text || "no body"}`);
+  const secret = process.env.CRON_SECRET ?? "";
+  if (!secret) {
+    console.error("CRON_SECRET is not set; refusing to call API");
+    return;
   }
-
+  try {
+    const origin = getOrigin();
+    const res = await fetch(`${origin}/api/admin/reports/generate`, {
+      method: "GET",
+      headers: { authorization: `Bearer ${secret}` },
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      console.error(`Sweep failed (${res.status}) -> ${text}`);
+      return;
+    }
+  } catch (e) {
+    console.error("Sweep exception:", e);
+    return;
+  }
   revalidatePath("/admin/rumble/report-generation");
 }
 
@@ -78,10 +100,21 @@ async function getSeasons(): Promise<string[]> {
 export default async function ReportGenerationPage() {
   const seasons = await getSeasons();
   const defaultSeasonId = seasons[0] ?? "";
+  const secretConfigured = Boolean(process.env.CRON_SECRET);
 
   return (
     <div className="space-y-8">
       <h1 className="text-3xl font-semibold">Report Generation</h1>
+
+      {!secretConfigured && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-900">
+          <p className="font-medium">CRON_SECRET is not configured.</p>
+          <p className="text-sm">
+            Add <code>CRON_SECRET</code> in Vercel → Project → Settings → Environment Variables
+            (Preview &amp; Production), then redeploy. Until then, the buttons below are disabled.
+          </p>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Generate single GW */}
@@ -96,6 +129,7 @@ export default async function ReportGenerationPage() {
                 defaultValue={defaultSeasonId}
                 className="w-full rounded-lg border px-3 py-2"
                 required
+                disabled={!secretConfigured}
               >
                 {seasons.map((id) => (
                   <option key={id} value={id}>
@@ -113,12 +147,16 @@ export default async function ReportGenerationPage() {
                 className="w-full rounded-lg border px-3 py-2"
                 defaultValue={1}
                 required
+                disabled={!secretConfigured}
               />
             </div>
           </div>
 
           <div className="mt-4">
-            <button className="rounded-xl bg-gray-900 px-4 py-2 text-white hover:bg-gray-800">
+            <button
+              className="rounded-xl bg-gray-900 px-4 py-2 text-white hover:bg-gray-800 disabled:opacity-50"
+              disabled={!secretConfigured}
+            >
               Run
             </button>
           </div>
@@ -134,7 +172,10 @@ export default async function ReportGenerationPage() {
             Sweeps gameweeks (last ~36h) and creates any missing reports.
           </p>
           <div className="mt-4">
-            <button className="rounded-xl bg-gray-900 px-4 py-2 text-white hover:bg-gray-800">
+            <button
+              className="rounded-xl bg-gray-900 px-4 py-2 text-white hover:bg-gray-800 disabled:opacity-50"
+              disabled={!secretConfigured}
+            >
               Sweep Now
             </button>
           </div>
