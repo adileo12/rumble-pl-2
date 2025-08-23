@@ -32,7 +32,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // Check if a report already exists (composite id on RumbleReport)
+    // Report idempotency
     const existing = await db.rumbleReport.findUnique({
       where: { seasonId_gwNumber: { seasonId, gwNumber } },
       select: { seasonId: true },
@@ -41,7 +41,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, already: true });
     }
 
-    // Load GW (ensure deadline is passed; pick by unique seasonId+number)
+    // Load GW & validate deadline
     const gw = await db.gameweek.findUnique({
       where: { seasonId_number: { seasonId, number: gwNumber } },
       select: { id: true, number: true, deadline: true, graded: true },
@@ -65,18 +65,23 @@ export async function POST(req: Request) {
       where: { seasonId, gwId: gw.id },
       _count: { clubId: true },
     });
+
     const clubIds = clubCounts.map((r) => r.clubId);
     const clubs = clubIds.length
       ? await db.club.findMany({
           where: { id: { in: clubIds } },
-          select: { id: true, short: true, name: true },
+          // 🔧 Use shortName (your schema) — not "short"
+          select: { id: true, shortName: true, name: true },
         })
       : [];
     const clubMeta = new Map(clubs.map((c) => [c.id, c]));
-    const clubLabels = clubCounts.map(
-      (r) => clubMeta.get(r.clubId)?.short ?? clubMeta.get(r.clubId)?.name ?? r.clubId
-    );
+
+    const clubLabels = clubCounts.map((r) => {
+      const c = clubMeta.get(r.clubId);
+      return c?.shortName ?? c?.name ?? r.clubId;
+    });
     const clubData = clubCounts.map((r) => r._count.clubId);
+
     const clubPieUrl = quickChartUrl(
       `Picks by club — GW ${gwNumber}`,
       clubLabels,
@@ -85,7 +90,7 @@ export async function POST(req: Request) {
 
     // B) Manual vs Proxy (pie)
     const sourceCounts = await db.pick.groupBy({
-      by: ["source"], // "USER" | "PROXY"
+      by: ["source"], // "USER" | "PROXY" (string in schema)
       where: { seasonId, gwId: gw.id },
       _count: { source: true },
     });
@@ -96,13 +101,14 @@ export async function POST(req: Request) {
     }
     const sourceLabels = ["Manual", "Proxy"];
     const sourceData = [sourceMap["USER"] ?? 0, sourceMap["PROXY"] ?? 0];
+
     const sourcePieUrl = quickChartUrl(
       `Manual vs Proxy — GW ${gwNumber}`,
       sourceLabels,
       sourceData
     );
 
-    // C) Eliminated names list (requires results to be graded)
+    // C) Eliminated names (only when graded)
     let eliminatedSvg: string | null = null;
     if (gw.graded) {
       const eliminated = await db.rumbleState.findMany({
