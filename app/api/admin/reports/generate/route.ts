@@ -5,6 +5,14 @@ import { db } from "@/src/lib/db";
 export const dynamic = "force-dynamic";
 export const revalidate = false;
 
+function assertCronAuth(req: NextRequest) {
+  const expected = process.env.CRON_SECRET;
+  const auth = req.headers.get("authorization");
+  if (expected && auth !== `Bearer ${expected}`) {
+    throw new Error("Unauthorized");
+  }
+}
+
 // GET is invoked by schedulers; POST can be used manually
 export async function GET() {
   const now = new Date();
