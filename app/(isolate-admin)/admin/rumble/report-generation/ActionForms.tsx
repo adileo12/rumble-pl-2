@@ -1,12 +1,21 @@
 "use client";
 
 import React from "react";
-import { useFormState, useFormStatus } from "react-dom";
+import {
+  useFormState as _useFormState,
+  useFormStatus,
+} from "react-dom";
 import type { ActionState } from "./actions";
 import {
   generateGwReportAction,
   sweepMissingReportsAction,
 } from "./actions";
+
+// Cast useFormState to the 2-arg reducer signature, so older @types don't complain.
+const useFormState = _useFormState as unknown as <S>(
+  action: (state: S, formData: FormData) => S | Promise<S>,
+  initialState: S
+) => [S, (formData: FormData) => void];
 
 function SubmitButton({ children }: { children: React.ReactNode }) {
   const { pending } = useFormStatus();
@@ -53,6 +62,7 @@ export function GwForm({ seasons }: { seasons: string[] }) {
           required
         />
       </div>
+
       <SubmitButton>Run</SubmitButton>
 
       {state.message && (
