@@ -4,8 +4,6 @@ import React from "react";
 import { useFormState, useFormStatus } from "react-dom";
 import type { ActionState } from "./types";
 
-export type ActionState = { ok: boolean; message: string };
-
 function SubmitButton({ children, disabled }: { children: React.ReactNode; disabled?: boolean }) {
   const { pending } = useFormStatus();
   return (
@@ -72,45 +70,4 @@ export default function ActionForms(props: {
           <div>
             <label className="mb-1 block text-sm text-gray-600">GW #</label>
             <input
-              name="gwNumber"
-              type="number"
-              min={1}
-              className="w-full rounded-lg border px-3 py-2"
-              defaultValue={1}
-              required
-            />
-          </div>
-        </div>
-
-        <div className="mt-4">
-          <SubmitButton>Run</SubmitButton>
-        </div>
-
-        {gwState.message && (
-          <p className={`mt-3 text-sm ${gwState.ok ? "text-emerald-700" : "text-rose-600"}`}>
-            {gwState.message}
-          </p>
-        )}
-
-        <p className="mt-3 text-xs text-gray-500">
-          Calls <code>/api/admin/reports/gw/generate</code> with server secret.
-        </p>
-      </form>
-
-      {/* Sweep recent */}
-      <form action={sweepAction} className="rounded-2xl border p-6 shadow-sm">
-        <h2 className="mb-4 text-xl font-medium">Generate Missing Reports</h2>
-        <p className="text-sm text-gray-600">Sweeps gameweeks (last ~36h) and creates any missing reports.</p>
-        <div className="mt-4">
-          <SubmitButton>Sweep Now</SubmitButton>
-        </div>
-
-        {sweepState.message && (
-          <p className={`mt-3 text-sm ${sweepState.ok ? "text-emerald-700" : "text-rose-600"}`}>
-            {sweepState.message}
-          </p>
-        )}
-      </form>
-    </div>
-  );
-}
+             
