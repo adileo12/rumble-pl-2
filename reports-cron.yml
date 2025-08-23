@@ -1,0 +1,14 @@
+name: Reports Cron
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"  # every 15 minutes
+  workflow_dispatch:
+
+jobs:
+  call-endpoint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Curl reports generator
+        run: |
+          curl -sS -X GET             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"             "${{ secrets.BASE_URL }}/api/admin/reports/generate"             || true
