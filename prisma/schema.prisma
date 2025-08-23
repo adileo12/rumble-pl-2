@@ -213,3 +213,14 @@ model RumbleState {
 
   @@unique([userId, seasonId])
 }
+
+
+model RumbleReport {
+  seasonId   String
+  gwNumber   Int
+  payload    Json
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@id([seasonId, gwNumber])
+}
