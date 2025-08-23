@@ -1,62 +1,76 @@
-import { prisma } from '@/lib/db'; // your prisma helper
-import assert from 'node:assert';
+// src/lib/reports.ts — schema-aligned helpers for reports
+import assert from "node:assert";
+import { db } from "@/src/lib/db";
 
 type GWKey = { seasonId: string; gwNumber: number };
 
-export async function ensureGWReadyForAB({ seasonId, gwNumber }: GWKey) {
-  const gw = await prisma.gameweek.findUnique({
-    where: { seasonId_gwNumber: { seasonId, gwNumber } },
-    select: { deadline: true, status: true },
+async function getGW({ seasonId, gwNumber }: GWKey) {
+  const gw = await db.gameweek.findFirst({
+    where: { seasonId, number: gwNumber },
+    select: { id: true, number: true, deadline: true, graded: true },
   });
-  assert(gw, 'Gameweek not found');
-  assert(gw.deadline <= new Date(), 'Deadline has not passed');
+  assert(gw, "Gameweek not found");
+  return gw;
 }
 
-export async function ensureGWReadyForC({ seasonId, gwNumber }: GWKey) {
-  const gw = await prisma.gameweek.findUnique({
-    where: { seasonId_gwNumber: { seasonId, gwNumber } },
-    select: { status: true },
-  });
-  assert(gw, 'Gameweek not found');
-  assert(gw.status === 'COMPLETE', 'Gameweek results not complete/locked');
+export async function ensureGWReadyForAB(key: GWKey) {
+  const gw = await getGW(key);
+  assert(gw.deadline <= new Date(), "Deadline has not passed");
+}
+
+export async function ensureGWReadyForC(key: GWKey) {
+  const gw = await getGW(key);
+  // C requires results processed (graded) so that eliminations are final
+  assert(gw.graded === true, "Gameweek not graded yet");
 }
 
 export async function fetchClubCounts({ seasonId, gwNumber }: GWKey) {
-  const rows = await prisma.rumblePick.groupBy({
-    by: ['clubId'],
-    where: { seasonId, gwNumber },
+  const gw = await getGW({ seasonId, gwNumber });
+  const rows = await db.pick.groupBy({
+    by: ["clubId"],
+    where: { seasonId, gwId: gw.id },
     _count: { clubId: true },
   });
-  assert(rows.length > 0, 'No picks for this GW');
-  // join with club names
-  const clubs = await prisma.club.findMany({
+
+  // fetch club short/name in one go
+  const clubs = await db.club.findMany({
     where: { id: { in: rows.map(r => r.clubId) } },
-    select: { id: true, name: true },
+    select: { id: true, name: true, short: true },
   });
-  const nameById = new Map(clubs.map(c => [c.id, c.name]));
-  return rows.map(r => ({ label: nameById.get(r.clubId) ?? r.clubId, value: r._count.clubId }));
+  const meta = new Map(clubs.map(c => [c.id, c]));
+  return rows
+    .map(r => ({
+      label: meta.get(r.clubId)?.short ?? meta.get(r.clubId)?.name ?? r.clubId,
+      value: r._count.clubId,
+    }))
+    .sort((a, b) => b.value - a.value);
 }
 
 export async function fetchSourceCounts({ seasonId, gwNumber }: GWKey) {
-  const rows = await prisma.rumblePick.groupBy({
-    by: ['submissionSource'],
-    where: { seasonId, gwNumber },
-    _count: { submissionSource: true },
+  const gw = await getGW({ seasonId, gwNumber });
+  const rows = await db.pick.groupBy({
+    by: ["source"],
+    where: { seasonId, gwId: gw.id },
+    _count: { source: true },
   });
-  assert(rows.length > 0, 'No picks for this GW');
+
   const map: Record<string, number> = {};
-  for (const r of rows) map[r.submissionSource ?? 'unknown'] = r._count.submissionSource;
+  for (const r of rows) map[r.source ?? "unknown"] = r._count.source;
+
+  // Project to UI labels
   return [
-    { label: 'Manual', value: map['manual'] ?? 0 },
-    { label: 'Proxy', value: map['proxy'] ?? 0 },
+    { label: "Manual", value: map["USER"] ?? 0 },
+    { label: "Proxy", value: map["PROXY"] ?? 0 },
   ];
 }
 
 export async function fetchEliminatedNames({ seasonId, gwNumber }: GWKey) {
-  // If eliminations are on a table named differently, adapt here:
-  const rows = await prisma.rumbleElimination.findMany({
-    where: { seasonId, gwNumber, eliminated: true },
-    select: { user: { select: { displayName: true, username: true } } },
+  // Eliminations are recorded on RumbleState with eliminatedAtGw === gwNumber
+  const states = await db.rumbleState.findMany({
+    where: { seasonId, eliminatedAtGw: gwNumber },
+    select: {
+      user: { select: { displayName: true, username: true, name: true } },
+    },
   });
-  return rows.map(r => r.user.displayName ?? r.user.username);
+  return states.map((s) => s.user.displayName ?? s.user.name ?? s.user.username);
 }
