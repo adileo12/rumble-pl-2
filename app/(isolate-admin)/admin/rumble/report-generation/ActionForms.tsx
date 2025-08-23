@@ -2,6 +2,7 @@
 
 import React from "react";
 import { useFormState, useFormStatus } from "react-dom";
+import type { ActionState } from "./types";
 
 export type ActionState = { ok: boolean; message: string };
 
