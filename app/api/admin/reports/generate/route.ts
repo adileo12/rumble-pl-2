@@ -5,7 +5,7 @@ import { db } from "@/src/lib/db";
 export const dynamic = "force-dynamic";
 export const revalidate = false;
 
-function assertCronAuth(req: NextRequest) {
+function assertCronAuth(req: Request) {
   const expected = process.env.CRON_SECRET;
   const auth = req.headers.get("authorization");
   if (expected && auth !== `Bearer ${expected}`) {
@@ -14,7 +14,8 @@ function assertCronAuth(req: NextRequest) {
 }
 
 // GET is invoked by schedulers; POST can be used manually
-export async function GET() {
+export async function GET(req: Request) {
+  assertCronAuth(req);
   const now = new Date();
   // Find GWs with deadline passed in last 36h and with no report yet
   const cutoff = new Date(now.getTime() - 36 * 60 * 60 * 1000);
