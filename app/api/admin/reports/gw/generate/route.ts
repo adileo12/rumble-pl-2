@@ -32,7 +32,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // Report idempotency
+    // Idempotency: do nothing if report exists
     const existing = await db.rumbleReport.findUnique({
       where: { seasonId_gwNumber: { seasonId, gwNumber } },
       select: { seasonId: true },
@@ -70,7 +70,7 @@ export async function POST(req: Request) {
     const clubs = clubIds.length
       ? await db.club.findMany({
           where: { id: { in: clubIds } },
-          // 🔧 Use shortName (your schema) — not "short"
+          // Your schema uses shortName (not short)
           select: { id: true, shortName: true, name: true },
         })
       : [];
@@ -90,7 +90,7 @@ export async function POST(req: Request) {
 
     // B) Manual vs Proxy (pie)
     const sourceCounts = await db.pick.groupBy({
-      by: ["source"], // "USER" | "PROXY" (string in schema)
+      by: ["source"], // "USER" | "PROXY"
       where: { seasonId, gwId: gw.id },
       _count: { source: true },
     });
@@ -111,20 +111,32 @@ export async function POST(req: Request) {
     // C) Eliminated names (only when graded)
     let eliminatedSvg: string | null = null;
     if (gw.graded) {
-      const eliminated = await db.rumbleState.findMany({
+      // 1) get eliminated userIds from RumbleState
+      const eliminatedStates = await db.rumbleState.findMany({
         where: { seasonId, eliminatedAtGw: gwNumber },
-        select: {
-          user: { select: { displayName: true, name: true, username: true } },
-        },
+        select: { userId: true },
         orderBy: { userId: "asc" },
       });
-      const names = eliminated.map(
-        (e) =>
-          e.user.displayName?.trim() ||
-          e.user.name?.trim() ||
-          e.user.username?.trim() ||
+      const userIds = eliminatedStates.map((e) => e.userId);
+
+      // 2) fetch user names in one query
+      const users = userIds.length
+        ? await db.user.findMany({
+            where: { id: { in: userIds } },
+            select: { id: true, displayName: true, name: true, username: true },
+          })
+        : [];
+      const userMeta = new Map(users.map((u) => [u.id, u]));
+      const names = userIds.map((id) => {
+        const u = userMeta.get(id);
+        return (
+          u?.displayName?.trim() ||
+          u?.name?.trim() ||
+          u?.username?.trim() ||
           "Unknown"
-      );
+        );
+      });
+
       eliminatedSvg = eliminationSVG({ seasonId, gwNumber, names });
     }
 
