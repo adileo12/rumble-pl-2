@@ -93,17 +93,18 @@ export async function POST(req: Request) {
       });
       const userIds = eliminatedStates.map((e) => e.userId);
 
-      // 2) fetch names from User (no displayName in your schema)
+      // 2) fetch names from User (no username/displayName in your schema)
       const users = userIds.length
         ? await db.user.findMany({
             where: { id: { in: userIds } },
-            select: { id: true, name: true, username: true },
+            select: { id: true, name: true, email: true },
           })
         : [];
       const userMeta = new Map(users.map((u) => [u.id, u]));
       const names = userIds.map((id) => {
         const u = userMeta.get(id);
-        return u?.name?.trim() || u?.username?.trim() || "Unknown";
+        const emailPrefix = u?.email ? u.email.split("@")[0] : "";
+        return (u?.name?.trim() || emailPrefix || "Unknown");
       });
 
       eliminatedSvg = eliminationSVG({ seasonId, gwNumber, names });
