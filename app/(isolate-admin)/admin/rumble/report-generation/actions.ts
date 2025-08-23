@@ -2,14 +2,15 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import type { ActionState } from "./types";
 
-function getOrigin(): string {
-  const envBase = process.env.NEXT_PUBLIC_BASE_URL?.trim();
-  if (envBase) return envBase.replace(/\/+$/, "");
+function getOriginAndCookie(): { origin: string; cookie: string } {
   const h = headers();
   const host = h.get("x-forwarded-host") ?? h.get("host");
   const proto = h.get("x-forwarded-proto") ?? "https";
   if (!host) throw new Error("Unable to determine request host");
-  return `${proto}://${host}`;
+  return {
+    origin: `${proto}://${host}`,
+    cookie: h.get("cookie") ?? "",
+  };
 }
 
 export async function generateGwReportAction(
@@ -21,16 +22,20 @@ export async function generateGwReportAction(
   const gwNumber = Number(formData.get("gwNumber") ?? NaN);
   const secret = process.env.CRON_SECRET ?? "";
 
-  if (!secret) return { ok: false, message: "CRON_SECRET is not set in env." };
-  if (!seasonId || Number.isNaN(gwNumber))
+  if (!seasonId || Number.isNaN(gwNumber)) {
     return { ok: false, message: "Provide a Season and a valid GW number." };
+  }
+  if (!secret) return { ok: false, message: "CRON_SECRET is not set in env." };
 
   try {
-    const res = await fetch(`${getOrigin()}/api/admin/reports/gw/generate`, {
+    const { origin, cookie } = getOriginAndCookie();
+    const res = await fetch(`${origin}/api/admin/reports/gw/generate`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
         authorization: `Bearer ${secret}`,
+        // Forward the user's cookies to bypass Vercel protection
+        cookie,
       },
       body: JSON.stringify({ seasonId, gwNumber }),
       cache: "no-store",
@@ -57,9 +62,13 @@ export async function sweepMissingReportsAction(
   if (!secret) return { ok: false, message: "CRON_SECRET is not set in env." };
 
   try {
-    const res = await fetch(`${getOrigin()}/api/admin/reports/generate`, {
+    const { origin, cookie } = getOriginAndCookie();
+    const res = await fetch(`${origin}/api/admin/reports/generate`, {
       method: "GET",
-      headers: { authorization: `Bearer ${secret}` },
+      headers: {
+        authorization: `Bearer ${secret}`,
+        cookie,
+      },
       cache: "no-store",
     });
 
