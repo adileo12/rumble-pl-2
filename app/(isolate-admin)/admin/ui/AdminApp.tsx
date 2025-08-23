@@ -121,56 +121,6 @@ export default function AdminApp() {
               </div>
               <Button onClick={processResults}>Run</Button>
             </div>
-          </div>
-        </div>
-      );
-    }
-    return (
-      <div className="flex-1">
-        <h2 className="text-xl font-semibold mb-4">Game Sync</h2>
-        <div className="flex gap-3">
-          <Button onClick={seedClubs}>Seed Clubs</Button>
-          <Button onClick={syncFixtures}>Sync Fixtures</Button>
-        </div>
-        <p className="mt-3 text-sm text-gray-600">
-          1) Seed → 2) Sync Fixtures → verify at <code>/api/status</code>.
-        </p>
-      </div>
-    );
-  }, [gwNumber, processResults, seasonId, section, seedClubs, syncFixtures]);
 
-  return (
-    <div className="max-w-5xl mx-auto px-4 py-6">
-      <header className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold">Admin</h1>
-      </header>
-
-      <Suspense fallback={<div className="text-sm text-gray-600">Loading nav…</div>}>
-        <NavTabs />
-      </Suspense>
-
-      {tab === "rumble" && (
-        <div className="flex">
-          {rumbleSidebar}
-          <section className="pl-6 flex-1">{rumbleContent}</section>
-        </div>
-      )}
-
-      {tab === "predictor" && (
-        <section>
-          <h2 className="text-xl font-semibold mb-2">Predictor</h2>
-          <p className="text-gray-600">Coming soon…</p>
-        </section>
-      )}
-
-      {tab === "site" && (
-        <section>
-          <h2 className="text-xl font-semibold mb-2">Site Settings</h2>
-          <p className="text-gray-600">Coming soon…</p>
-        </section>
-      )}
-
-      <pre className="mt-6 bg-gray-50 p-3 rounded text-xs whitespace-pre-wrap">{msg}</pre>
-    </div>
-  );
-}
+            {/* NEW: Link to the server-rendered Reports page */}
+            <div className="border
