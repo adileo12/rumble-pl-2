@@ -1,44 +1,43 @@
-import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
-import { POST as genOne } from '@/app/api/admin/reports/gw/generate/route'; // reuse handler
+// app/api/admin/reports/generate/route.ts
+import { NextResponse } from "next/server";
+import { db } from "@/src/lib/db";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 export const revalidate = false;
 
+// GET is invoked by schedulers; POST can be used manually
 export async function GET() {
-  // Also allow GET for cron
   const now = new Date();
+  // Find GWs with deadline passed in last 36h and with no report yet
+  const cutoff = new Date(now.getTime() - 36 * 60 * 60 * 1000);
 
-  // Find GWs whose deadline passed within last 36h and that don’t have a report yet
-  const gws = await prisma.gameweek.findMany({
+  const gws = await db.gameweek.findMany({
     where: {
-      deadline: { lte: now },
+      deadline: { lte: now, gte: cutoff },
     },
-    select: { seasonId: true, gwNumber: true },
-    orderBy: { deadline: 'desc' },
-    take: 6,
+    select: { id: true, number: true, seasonId: true },
+    orderBy: [{ seasonId: "asc" }, { number: "asc" }],
   });
 
   const out: any[] = [];
   for (const gw of gws) {
-    const existing = await prisma.rumbleReport.findUnique({
-      where: { seasonId_gwNumber: { seasonId: gw.seasonId, gwNumber: gw.gwNumber } },
+    const exists = await db.rumbleReport.findUnique({
+      where: { seasonId_gwNumber: { seasonId: gw.seasonId, gwNumber: gw.number } },
+      select: { seasonId: true },
     });
-    if (existing) continue;
+    if (exists) continue;
 
-    // call single-GW generator
-    const resp = await genOne(new Request('http://local', {
-      method: 'POST',
-      body: JSON.stringify({ seasonId: gw.seasonId, gwNumber: gw.gwNumber }),
-      headers: { 'content-type': 'application/json' }
-    }) as any);
-    out.push(await resp.json());
+    const resp = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/admin/reports/gw/generate`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-scheduler": "true", "authorization": `Bearer ${process.env.CRON_SECRET ?? ""}` },
+      body: JSON.stringify({ seasonId: gw.seasonId, gwNumber: gw.number }),
+    });
+    out.push({ gw: gw.number, seasonId: gw.seasonId, status: resp.status, text: await resp.text() });
   }
 
   return NextResponse.json({ ok: true, generated: out.length, details: out });
 }
 
-// Vercel Cron hits GET; admins can POST manually with body to force a GW.
-export async function POST(req: Request) {
-  return GET(); // keep it simple
+export async function POST() {
+  return GET();
 }
