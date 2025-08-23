@@ -219,7 +219,7 @@ model RumbleReport {
   id        String   @id @default(cuid())
   seasonId  String
   gwNumber  Int
-  path      String
+  payload   Json                   // <— add this
   status    String   @default("ready")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
