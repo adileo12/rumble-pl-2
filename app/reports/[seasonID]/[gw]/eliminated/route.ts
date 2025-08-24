@@ -1,12 +1,11 @@
-// app/reports/[seasonID]/[gw]/eliminated/route.ts
 import { NextResponse } from "next/server";
 import { db } from "@/src/lib/db";
 
 export const dynamic = "force-dynamic";
 export const revalidate = false;
 
-export async function GET(_: Request, { params }: { params: { seasonId: string; gw: string } }) {
-  const seasonId = params.seasonId;
+export async function GET(_: Request, { params }: { params: { seasonID: string; gw: string } }) {
+  const seasonId = params.seasonID;      // ✅ match the folder name
   const gwNumber = Number(params.gw);
   if (!seasonId || Number.isNaN(gwNumber)) {
     return NextResponse.json({ error: "Invalid params" }, { status: 400 });
