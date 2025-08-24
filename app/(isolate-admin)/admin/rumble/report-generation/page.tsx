@@ -1,65 +1,41 @@
-import { notFound } from "next/navigation";
+import ActionForms from "./ActionForms";
 import { db } from "@/src/lib/db";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export default async function ReportPage({
-  params,
-}: {
-  params: { seasonId: string; gwNumber: string };
-}) {
-  const seasonId = decodeURIComponent(params.seasonId);
-  const gwNumber = Number(params.gwNumber);
+export default async function Page() {
+  const seasons = (await db.season.findMany({
+    select: { id: true },
+    orderBy: { id: "asc" },
+  })).map(s => s.id);
 
-  const report = await db.rumbleReport.findUnique({
-    where: { seasonId_gwNumber: { seasonId, gwNumber } },
-    select: { payload: true, seasonId: true, gwNumber: true },
+  const recent = await db.rumbleReport.findMany({
+    select: { seasonId: true, gwNumber: true, updatedAt: true },
+    orderBy: [{ updatedAt: "desc" }, { seasonId: "asc" }, { gwNumber: "desc" }],
+    take: 12,
   });
 
-  if (!report) notFound();
-
-  const payload = report.payload as any;
-  const clubPieUrl = payload?.clubPieUrl as string | undefined;
-  const sourcePieUrl = payload?.sourcePieUrl as string | undefined;
-  const eliminatedSvg = payload?.eliminatedSvg as string | undefined;
-  const svgDataUrl = eliminatedSvg
-    ? `data:image/svg+xml;utf8,${encodeURIComponent(eliminatedSvg)}`
-    : null;
-
   return (
-    <div className="space-y-6">
-      <h1 className="text-3xl font-semibold">
-        GW {report.gwNumber} — {report.seasonId}
-      </h1>
+    <div className="space-y-8">
+      <h1 className="text-3xl font-semibold">Report Generation</h1>
 
-      <div className="grid md:grid-cols-2 gap-6">
-        <div className="border rounded p-4">
-          <h2 className="font-medium mb-2">Picks by Club</h2>
-          {clubPieUrl ? (
-            <img src={clubPieUrl} alt="Picks by Club" className="w-full h-auto" />
-          ) : (
-            <p>No data.</p>
-          )}
-        </div>
-
-        <div className="border rounded p-4">
-          <h2 className="font-medium mb-2">Manual vs Proxy</h2>
-          {sourcePieUrl ? (
-            <img src={sourcePieUrl} alt="Manual vs Proxy" className="w-full h-auto" />
-          ) : (
-            <p>No data.</p>
-          )}
-        </div>
-      </div>
+      <ActionForms seasons={seasons} />
 
       <div className="border rounded p-4">
-        <h2 className="font-medium mb-2">Eliminations</h2>
-        {svgDataUrl ? (
-          <img src={svgDataUrl} alt="Eliminations" className="max-w-full h-auto" />
-        ) : (
-          <p>Not available until this GW is graded.</p>
-        )}
+        <h2 className="font-medium mb-2">Recent reports</h2>
+        <ul className="list-disc pl-5">
+          {recent.map(r => (
+            <li key={`${r.seasonId}-${r.gwNumber}`}>
+              <a className="underline"
+                 href={`/admin/rumble/report-generation/${encodeURIComponent(r.seasonId)}/${r.gwNumber}`}>
+                {r.seasonId} — GW {r.gwNumber}
+              </a>
+              <span className="text-sm text-slate-500"> (updated {r.updatedAt.toISOString()})</span>
+            </li>
+          ))}
+          {recent.length === 0 && <li>No reports yet.</li>}
+        </ul>
       </div>
     </div>
   );
