@@ -5,7 +5,6 @@ import { revalidatePath } from "next/cache";
 export type ActionState = { ok: boolean; message: string };
 
 function baseUrl() {
-  // Prefer explicit site URL, else use the deployment URL Vercel injects
   const explicit = process.env.NEXT_PUBLIC_SITE_URL;
   const vercel = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "";
   return explicit || vercel || "http://localhost:3000";
@@ -13,9 +12,8 @@ function baseUrl() {
 
 function withBypass(path: string) {
   const u = new URL(path, baseUrl());
-  const token = process.env.VERCEL_BYPASS_TOKEN;
+  const token = process.env.VERCEL_BYPASS_TOKEN; // set this in Vercel
   if (token) {
-    // This sets the bypass cookie on first request so subsequent calls work too
     u.searchParams.set("x-vercel-set-bypass-cookie", "true");
     u.searchParams.set("x-vercel-protection-bypass", token);
   }
@@ -27,24 +25,24 @@ async function postJSON(path: string, body: unknown): Promise<ActionState> {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      ...(process.env.CRON_SECRET ? { "x-cron-secret": process.env.CRON_SECRET } : {}),
+      // ✅ match your route’s assertCronAuth()
+      ...(process.env.CRON_SECRET ? { Authorization: `Bearer ${process.env.CRON_SECRET}` } : {}),
     },
     body: JSON.stringify(body ?? {}),
     cache: "no-store",
     redirect: "follow",
   });
 
-  // Try to give a helpful message on failure (401 will return the auth HTML)
   if (!r.ok) {
     const text = await r.text();
-    return { ok: false, message: `HTTP ${r.status} ${r.statusText}: ${text.slice(0, 600)}` };
+    return { ok: false, message: `HTTP ${r.status} ${r.statusText}: ${text.slice(0, 800)}` };
   }
-
-  const json = await r.json().catch(() => ({}));
-  const ok = !!(json as any).ok;
-  const message = (json as any).message || (json as any).error || "OK";
-  return { ok, message };
+  const json = await r.json().catch(() => ({} as any));
+  return { ok: !!json.ok, message: json.message || json.error || "OK" };
 }
+
+// Set this if your folder is not `/gw`
+const API_PREFIX = process.env.NEXT_PUBLIC_REPORT_API_PREFIX ?? "/api/admin/reports/gw";
 
 export async function generateGwReportAction(
   _prev: ActionState,
@@ -54,15 +52,14 @@ export async function generateGwReportAction(
   const gwNumber = Number(formData.get("gwNumber") || 0);
   if (!seasonId || !gwNumber) return { ok: false, message: "Season & GW are required." };
 
-  const res = await postJSON("/api/admin/reports/gw/generate", { seasonId, gwNumber });
+  const res = await postJSON(`${API_PREFIX}/generate`, { seasonId, gwNumber });
   revalidatePath("/admin", "page");
   return res;
 }
 
-export async function sweepMissingReportsAction(
-  _prev: ActionState
-): Promise<ActionState> {
-  const res = await postJSON("/api/admin/reports/gw/sweep", {});
+// (Optional) Only add a Sweep button if you actually create this route.
+export async function sweepMissingReportsAction(_prev: ActionState): Promise<ActionState> {
+  const res = await postJSON(`${API_PREFIX}/sweep`, {});
   revalidatePath("/admin", "page");
   return res;
 }
