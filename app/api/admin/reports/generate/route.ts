@@ -1,4 +1,3 @@
-// app/api/admin/reports/generate/route.ts
 import { NextResponse } from "next/server";
 import { db } from "@/src/lib/db";
 
@@ -16,7 +15,6 @@ export async function POST(req: Request) {
   try {
     assertCronAuth(req);
 
-    // find the last ~36h worth of GWs whose deadline has passed but report is missing
     const now = new Date();
     const since = new Date(now.getTime() - 36 * 60 * 60 * 1000);
 
@@ -34,8 +32,9 @@ export async function POST(req: Request) {
       });
       if (exists) { skipped++; continue; }
 
-      // call the per-GW generator internally
-      const res = await fetch(new URL("/api/admin/reports/gw/generate", getBase()), {
+      // call the per-GW generator
+      const base = getBase();
+      const res = await fetch(`${base}/api/admin/reports/gw/generate`, {
         method: "POST",
         headers: {
           "content-type": "application/json",
