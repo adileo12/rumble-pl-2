@@ -17,9 +17,13 @@ export async function POST(req: Request) {
     const { seasonId, gwNumber } = await req.json();
     const res = await generateGwReportCore({ seasonId, gwNumber });
     return NextResponse.json(res, { status: 200 });
-  } catch (err: any) {
+   } catch (err: any) {
     const msg = typeof err?.message === "string" ? err.message : "Internal error";
-    const status = msg === "Unauthorized" ? 401 : msg === "Gameweek not found" ? 404 : msg === "Deadline has not passed" ? 409 : 500;
+    const status =
+      msg === "Unauthorized" ? 401 :
+      msg === "Gameweek not found" ? 404 :
+      msg === "Deadline has not passed" ? 409 :
+      500;
     return NextResponse.json({ ok: false, error: msg }, { status });
   }
 }
