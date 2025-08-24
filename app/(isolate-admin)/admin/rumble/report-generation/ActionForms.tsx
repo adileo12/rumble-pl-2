@@ -28,13 +28,12 @@ export function GwForm({ seasons }: { seasons: string[] }) {
   const gwInput = useId();
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const fd = new FormData(e.currentTarget);
-    start(async () => {
-      const res = await generateGwReportAction(state, fd);
-      setState(res);
-    });
-  }
+  e.preventDefault();
+  start(async () => {
+    const res = await sweepMissingReportsAction(state);
+    setState(res);
+  });
+}
 
   return (
     <form onSubmit={onSubmit} className="space-y-3 border rounded p-4">
