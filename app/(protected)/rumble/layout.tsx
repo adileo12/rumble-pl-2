@@ -27,6 +27,7 @@ export default async function RumbleLayout({
     { href: "/rumble/dashboard", label: "Dashboard" },
     { href: "/rumble/leaderboard", label: "Leaderboard" },
     { href: "/rumble/rules", label: "Rules" }, // NEW
+    { href: "/rumble/reports", label: "Reports" },
   ];
 
   return (
