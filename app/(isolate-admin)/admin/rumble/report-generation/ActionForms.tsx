@@ -1,92 +1,50 @@
 "use client";
 
 import React from "react";
-import {
-  useFormState as _useFormState,
-  useFormStatus,
-} from "react-dom";
-import type { ActionState } from "./actions";
-import {
-  generateGwReportAction,
-  sweepMissingReportsAction,
-} from "./actions";
+import { useFormState, useFormStatus } from "react-dom";
+import { generateGwReportAction, type ActionState } from "./actions";
 
-// Cast useFormState to the 2-arg reducer signature, so older @types don't complain.
-const useFormState = _useFormState as unknown as <S>(
-  action: (state: S, formData: FormData) => S | Promise<S>,
-  initialState: S
-) => [S, (formData: FormData) => void];
-
-function SubmitButton({ children }: { children: React.ReactNode }) {
+function SubmitBtn({ children }: { children: React.ReactNode }) {
   const { pending } = useFormStatus();
   return (
     <button
+      className="px-4 py-2 rounded bg-slate-800 text-white disabled:opacity-50"
       type="submit"
       disabled={pending}
-      className="px-4 py-2 rounded bg-slate-800 text-white hover:bg-slate-900 disabled:opacity-50"
     >
-      {pending ? "Working…" : children}
+      {pending ? "Working..." : children}
     </button>
   );
 }
 
 export function GwForm({ seasons }: { seasons: string[] }) {
+  const defaultSeason = seasons[0] ?? "";
   const [state, action] = useFormState<ActionState>(generateGwReportAction, {
     ok: false,
     message: "",
   });
 
   return (
-    <form action={action} className="border rounded p-4 space-y-3">
+    <form action={action} className="border rounded p-4 space-y-3 max-w-xl">
       <h3 className="font-medium">Process Gameweek Results</h3>
       <div className="flex gap-2">
-        <select
-          name="seasonId"
-          className="border rounded px-3 py-2 w-64"
-          defaultValue={seasons[0] ?? ""}
-          required
-        >
+        <select name="seasonId" defaultValue={defaultSeason} className="border rounded px-3 py-2">
           {seasons.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
+            <option key={s} value={s}>{s}</option>
           ))}
         </select>
         <input
-          name="gwNumber"
           type="number"
+          name="gwNumber"
           min={1}
-          step={1}
-          placeholder="GW number"
-          className="border rounded px-3 py-2 w-32"
+          placeholder="GW"
+          className="border rounded px-3 py-2 w-24"
           required
         />
+        <SubmitBtn>Run</SubmitBtn>
       </div>
-
-      <SubmitButton>Run</SubmitButton>
-
       {state.message && (
-        <pre className="mt-2 text-xs bg-gray-50 p-2 rounded whitespace-pre-wrap">
-          {state.message}
-        </pre>
-      )}
-    </form>
-  );
-}
-
-export function SweepForm() {
-  const [state, action] = useFormState<ActionState>(sweepMissingReportsAction, {
-    ok: false,
-    message: "",
-  });
-
-  return (
-    <form action={action} className="border rounded p-4 space-y-3">
-      <h3 className="font-medium">Sweep Missing Reports</h3>
-      <SubmitButton>Sweep Now</SubmitButton>
-
-      {state.message && (
-        <pre className="mt-2 text-xs bg-gray-50 p-2 rounded whitespace-pre-wrap">
+        <pre className={"text-sm " + (state.ok ? "text-green-700" : "text-red-700")}>
           {state.message}
         </pre>
       )}
