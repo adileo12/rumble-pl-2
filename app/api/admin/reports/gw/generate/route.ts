@@ -1,15 +1,14 @@
-// app/api/admin/reports/gw/generate/route.ts
 import { NextResponse } from "next/server";
 import { db } from "@/src/lib/db";
 import { quickChartUrl } from "@/src/lib/quickchart";
 import { eliminationSVG } from "@/src/lib/svg";
 
 export const dynamic = "force-dynamic";
-export const runtime = "nodejs";   // Prisma needs Node runtime
+export const runtime = "nodejs"; // Prisma needs Node runtime
 
 function assertCronAuth(req: Request) {
   const expected = process.env.CRON_SECRET;
-  if (!expected) return; // allow local
+  if (!expected) return; // allow local dev when not set
   const auth = req.headers.get("authorization");
   if (auth !== `Bearer ${expected}`) throw new Error("Unauthorized");
 }
@@ -23,7 +22,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: "seasonId and gwNumber required" }, { status: 400 });
     }
 
-    // idempotency
+    // idempotent
     const existing = await db.rumbleReport.findUnique({
       where: { seasonId_gwNumber: { seasonId, gwNumber } },
       select: { seasonId: true },
@@ -39,34 +38,38 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: "Deadline has not passed" }, { status: 409 });
     }
 
-    // A) picks by club (pie)
+    // A) Picks by club (pie)
     const clubCounts = await db.pick.groupBy({
       by: ["clubId"],
       where: { seasonId, gwId: gw.id },
       _count: { clubId: true },
     });
-    const clubIds = clubCounts.map((r) => r.clubId);
+    const clubIds = clubCounts.map(r => r.clubId);
     const clubs = clubIds.length
       ? await db.club.findMany({ where: { id: { in: clubIds } }, select: { id: true, shortName: true, name: true } })
       : [];
-    const clubMeta = new Map(clubs.map((c) => [c.id, c]));
-    const clubLabels = clubCounts.map((r) => {
+    const clubMeta = new Map(clubs.map(c => [c.id, c]));
+    const clubLabels = clubCounts.map(r => {
       const c = clubMeta.get(r.clubId);
       return c?.shortName ?? c?.name ?? r.clubId;
     });
-    const clubData = clubCounts.map((r) => r._count.clubId);
+    const clubData = clubCounts.map(r => r._count.clubId);
     const clubPieUrl = quickChartUrl(`Picks by club — GW ${gwNumber}`, clubLabels, clubData);
 
-    // B) manual vs proxy (pie)
+    // B) Manual vs Proxy (pie)
     const sourceCounts = await db.pick.groupBy({
       by: ["source"], // 'USER' | 'PROXY'
       where: { seasonId, gwId: gw.id },
       _count: { source: true },
     });
     const bySrc = Object.fromEntries(sourceCounts.map(r => [(r.source || "").toUpperCase(), r._count.source]));
-    const sourcePieUrl = quickChartUrl(`Manual vs Proxy — GW ${gwNumber}`, ["Manual", "Proxy"], [bySrc.USER ?? 0, bySrc.PROXY ?? 0]);
+    const sourcePieUrl = quickChartUrl(
+      `Manual vs Proxy — GW ${gwNumber}`,
+      ["Manual", "Proxy"],
+      [bySrc.USER ?? 0, bySrc.PROXY ?? 0]
+    );
 
-    // C) eliminated list (if graded)
+    // C) Eliminations (if graded)
     let eliminatedSvg: string | null = null;
     if (gw.graded) {
       const eliminated = await db.rumbleState.findMany({
