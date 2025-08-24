@@ -21,18 +21,20 @@ async function postJSON(path: string, body: any) {
     body: JSON.stringify(body),
     cache: "no-store",
   });
+
   const text = await res.text();
-  let data: any; try { data = JSON.parse(text); } catch { data = { ok: false, error: text }; }
+  let data: any;
+  try { data = JSON.parse(text); } catch { data = { ok: false, error: text }; }
+
   if (!res.ok) throw new Error(data?.error || `${res.status} ${res.statusText}`);
   return data;
 }
 
-export async function generateGwReportAction(
-  _prev: ActionState,
-  formData: FormData
-): Promise<ActionState> {
-  const seasonId = String(formData.get("seasonId") ?? "");
-  const gwNumber = Number(formData.get("gwNumber") ?? NaN);
+/** Call the per-GW generator with explicit values. */
+export async function generateGwReport(values: { seasonId: string; gwNumber: number }): Promise<ActionState> {
+  const seasonId = (values.seasonId ?? "").trim();
+  const gwNumber = Number(values.gwNumber);
+
   if (!seasonId || Number.isNaN(gwNumber)) {
     return { ok: false, message: "seasonId and gwNumber required" };
   }
@@ -44,9 +46,8 @@ export async function generateGwReportAction(
   }
 }
 
-export async function sweepMissingReportsAction(
-  _prev: ActionState
-): Promise<ActionState> {
+/** Sweep recently passed GWs and backfill any missing reports. */
+export async function sweepMissingReports(): Promise<ActionState> {
   try {
     await postJSON("/api/admin/reports/generate", {});
     return { ok: true, message: "Sweep complete." };
