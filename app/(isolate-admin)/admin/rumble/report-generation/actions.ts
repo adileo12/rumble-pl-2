@@ -1,4 +1,3 @@
-// app/(isolate-admin)/admin/rumble/report-generation/actions.ts
 "use server";
 
 export type ActionState = { ok: boolean; message: string };
@@ -22,7 +21,6 @@ async function postJSON(path: string, body: any) {
     body: JSON.stringify(body),
     cache: "no-store",
   });
-
   const text = await res.text();
   let data: any; try { data = JSON.parse(text); } catch { data = { ok: false, error: text }; }
   if (!res.ok) throw new Error(data?.error || `${res.status} ${res.statusText}`);
