@@ -1,44 +1,41 @@
 "use client";
 
 import React from "react";
-import { useFormState, useFormStatus } from "react-dom";
 import type { ActionState } from "./actions";
-import { generateGwReportAction, sweepMissingReportsAction } from "./actions";
-
-function SubmitBtn({ children }: { children: React.ReactNode }) {
-  const { pending } = useFormStatus();
-  return (
-    <button className="btn btn-primary" disabled={pending} type="submit">
-      {pending ? "Working..." : children}
-    </button>
-  );
-}
+import { generateGwReport, sweepMissingReports } from "./actions";
 
 export function GwForm({ seasons }: { seasons: string[] }) {
-  const [state, action] = useFormState<ActionState>(generateGwReportAction, {
-    ok: false,
-    message: "",
-  });
+  const [seasonId, setSeasonId] = React.useState(seasons[0] ?? "");
+  const [gwNumber, setGwNumber] = React.useState<number | "">("");
+  const [state, setState] = React.useState<ActionState>({ ok: false, message: "" });
+  const [pending, start] = React.useTransition();
 
-  // default to first season if present
-  const defaultSeasonId = seasons[0] ?? "";
+  function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    start(async () => {
+      const res = await generateGwReport({
+        seasonId,
+        gwNumber: typeof gwNumber === "string" ? Number(gwNumber) : gwNumber,
+      });
+      setState(res);
+    });
+  }
 
   return (
-    <form action={action} className="space-y-3">
+    <form onSubmit={onSubmit} className="space-y-3">
       <h2 className="text-xl font-semibold">Generate GW Report</h2>
 
       <label className="block">
         <span className="text-sm">Season</span>
         <select
           name="seasonId"
-          defaultValue={defaultSeasonId}
+          value={seasonId}
+          onChange={(e) => setSeasonId(e.target.value)}
           className="border rounded p-2 w-full"
           required
         >
           {seasons.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
+            <option key={s} value={s}>{s}</option>
           ))}
         </select>
       </label>
@@ -50,12 +47,16 @@ export function GwForm({ seasons }: { seasons: string[] }) {
           name="gwNumber"
           min={1}
           step={1}
+          value={gwNumber}
+          onChange={(e) => setGwNumber(e.target.value === "" ? "" : Number(e.target.value))}
           className="border rounded p-2 w-full"
           required
         />
       </label>
 
-      <SubmitBtn>Run now</SubmitBtn>
+      <button className="btn btn-primary" disabled={pending} type="submit">
+        {pending ? "Working..." : "Run now"}
+      </button>
 
       {state.message && (
         <p className={state.ok ? "text-green-600" : "text-red-600"}>{state.message}</p>
@@ -66,13 +67,12 @@ export function GwForm({ seasons }: { seasons: string[] }) {
 
 export function SweepForm() {
   const [state, setState] = React.useState<ActionState>({ ok: false, message: "" });
-  const [pending, start] = (React as any).useTransition(); // no TS fuss
+  const [pending, start] = React.useTransition();
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     start(async () => {
-      // IMPORTANT: server action takes ONE arg (prev state)
-      const res = await sweepMissingReportsAction(state);
+      const res = await sweepMissingReports();
       setState(res);
     });
   }
@@ -90,11 +90,7 @@ export function SweepForm() {
   );
 }
 
-export default function ActionForms({
-  seasons,
-}: {
-  seasons: string[];
-}) {
+export default function ActionForms({ seasons }: { seasons: string[] }) {
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
       <div className="p-4 border rounded-md">
