@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
 import type { ActionState } from "./actions";
 import { generateGwReport, sweepMissingReports } from "./actions";
 
@@ -48,7 +49,7 @@ export function GwForm({ seasons }: { seasons: string[] }) {
           min={1}
           step={1}
           value={gwNumber}
-          onChange={(e) => setGwNumber(e.target.value === "" ? "" : Number(e.target.value))}
+            onChange={(e) => setGwNumber(e.target.value === "" ? "" : Number(e.target.value))}
           className="border rounded p-2 w-full"
           required
         />
@@ -59,7 +60,17 @@ export function GwForm({ seasons }: { seasons: string[] }) {
       </button>
 
       {state.message && (
-        <p className={state.ok ? "text-green-600" : "text-red-600"}>{state.message}</p>
+        <div className="space-y-1">
+          <p className={state.ok ? "text-green-600" : "text-red-600"}>{state.message}</p>
+          {state.ok && state.seasonId && typeof state.gwNumber === "number" && (
+            <Link
+              className="text-blue-600 underline"
+              href={`/admin/rumble/reports/${encodeURIComponent(state.seasonId)}/${state.gwNumber}`}
+            >
+              View report
+            </Link>
+          )}
+        </div>
       )}
     </form>
   );
