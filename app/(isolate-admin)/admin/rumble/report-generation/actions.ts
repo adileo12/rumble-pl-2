@@ -2,7 +2,12 @@
 
 import { generateGwReportCore, sweepMissingReportsCore } from "@/src/lib/reports-core";
 
-export type ActionState = { ok: boolean; message: string };
+export type ActionState = {
+  ok: boolean;
+  message: string;
+  seasonId?: string;
+  gwNumber?: number;
+};
 
 export async function generateGwReport(values: { seasonId: string; gwNumber: number }): Promise<ActionState> {
   const seasonId = (values.seasonId ?? "").trim();
@@ -12,7 +17,7 @@ export async function generateGwReport(values: { seasonId: string; gwNumber: num
   }
   try {
     await generateGwReportCore({ seasonId, gwNumber });
-    return { ok: true, message: "Report generated." };
+    return { ok: true, message: "Report generated.", seasonId, gwNumber };
   } catch (e: any) {
     return { ok: false, message: e?.message || "Failed to generate." };
   }
