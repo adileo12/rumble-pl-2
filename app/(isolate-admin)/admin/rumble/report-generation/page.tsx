@@ -7,11 +7,12 @@ export const revalidate = 0;
 
 async function getSeasons(): Promise<string[]> {
   const rows = await db.season.findMany({ select: { id: true }, orderBy: { id: "asc" } });
-  return rows.map(r => r.id);
+  return rows.map((r) => r.id);
 }
 
 export default async function ReportGenerationPage() {
   const seasons = await getSeasons();
+
   return (
     <div className="space-y-8">
       <h1 className="text-3xl font-semibold">Report Generation</h1>
