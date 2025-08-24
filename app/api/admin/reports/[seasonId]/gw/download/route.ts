@@ -1,16 +1,12 @@
 import { NextResponse } from "next/server";
-import { Resvg } from "@resvg/resvg-js";
 import { db } from "@/src/lib/db";
-
-// If you have admin auth middleware, this route will inherit it.
-// Otherwise, add your check here.
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET(req: Request, { params }: { params: { seasonId: string; gw: string } }) {
   const url = new URL(req.url);
-  const type = url.searchParams.get("type"); // club | source | elims
+  const type = url.searchParams.get("type"); // "club" | "source" | "elims"
   const seasonId = decodeURIComponent(params.seasonId);
   const gwNumber = Number(params.gw);
 
@@ -52,13 +48,16 @@ export async function GET(req: Request, { params }: { params: { seasonId: string
     const svg = payload?.eliminatedSvg as string | undefined;
     if (!svg) return NextResponse.json({ error: "Missing" }, { status: 404 });
 
-    // Render SVG → PNG
+    // 🔁 WASM version of resvg (bundles cleanly on Vercel/Next)
+    const { Resvg } = await import("@resvg/resvg-wasm");
     const r = new Resvg(svg, {
-      fitTo: { mode: "width", value: 1400 }, // adjust size if desired
+      fitTo: { mode: "width", value: 1400 },
       background: "white",
     });
-    const png = r.render().asPng();
-    return new NextResponse(png, {
+    const pngU8 = r.render().asPng(); // Uint8Array
+    const buf = Buffer.from(pngU8);
+
+    return new NextResponse(buf, {
       status: 200,
       headers: {
         "Content-Type": "image/png",
