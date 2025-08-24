@@ -1,115 +1,108 @@
 "use client";
 
-import React, { useId, useState, useTransition } from "react";
-import {
-  generateGwReportAction,
-  sweepMissingReportsAction,
-  type ActionState,
-} from "./actions";
+import React from "react";
+import { useFormState, useFormStatus } from "react-dom";
+import type { ActionState } from "./actions";
+import { generateGwReportAction, sweepMissingReportsAction } from "./actions";
 
-function RunBtn({ pending, children }: { pending: boolean; children: React.ReactNode }) {
+function SubmitBtn({ children }: { children: React.ReactNode }) {
+  const { pending } = useFormStatus();
   return (
-    <button
-      type="submit"
-      disabled={pending}
-      className="px-4 py-2 rounded bg-slate-900 text-white disabled:opacity-50"
-    >
-      {pending ? "Working…" : children}
+    <button className="btn btn-primary" disabled={pending} type="submit">
+      {pending ? "Working..." : children}
     </button>
   );
 }
 
 export function GwForm({ seasons }: { seasons: string[] }) {
-  const [state, setState] = useState<ActionState>({ ok: false, message: "" });
-  const [gw, setGw] = useState<number>(1);
-  const [pending, start] = useTransition();
-
-  const seasonIdInput = useId();
-  const gwInput = useId();
-
-  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
-  e.preventDefault();
-  start(async () => {
-    const res = await sweepMissingReportsAction(state);
-    setState(res);
+  const [state, action] = useFormState<ActionState>(generateGwReportAction, {
+    ok: false,
+    message: "",
   });
-}
+
+  // default to first season if present
+  const defaultSeasonId = seasons[0] ?? "";
 
   return (
-    <form onSubmit={onSubmit} className="space-y-3 border rounded p-4">
-      <h3 className="text-lg font-medium">Generate Gameweek Report</h3>
+    <form action={action} className="space-y-3">
+      <h2 className="text-xl font-semibold">Generate GW Report</h2>
 
-      <div className="flex gap-3">
-        <label htmlFor={seasonIdInput} className="sr-only">Season</label>
+      <label className="block">
+        <span className="text-sm">Season</span>
         <select
-          id={seasonIdInput}
           name="seasonId"
-          className="border rounded px-3 py-2 min-w-[420px]"
-          defaultValue={seasons[0] ?? ""}
+          defaultValue={defaultSeasonId}
+          className="border rounded p-2 w-full"
+          required
         >
           {seasons.map((s) => (
-            <option key={s} value={s}>{s}</option>
+            <option key={s} value={s}>
+              {s}
+            </option>
           ))}
         </select>
+      </label>
 
-        <label htmlFor={gwInput} className="sr-only">GW #</label>
+      <label className="block">
+        <span className="text-sm">GW Number</span>
         <input
-          id={gwInput}
-          name="gwNumber"
           type="number"
+          name="gwNumber"
           min={1}
-          value={gw}
-          onChange={(e) => setGw(Math.max(1, Number(e.target.value || "1")))}
-          className="border rounded px-3 py-2 w-28"
+          step={1}
+          className="border rounded p-2 w-full"
+          required
         />
-      </div>
+      </label>
 
-      <RunBtn pending={pending}>Run</RunBtn>
+      <SubmitBtn>Run now</SubmitBtn>
 
-      {state.message ? (
-        <div className={`text-sm ${state.ok ? "text-emerald-600" : "text-rose-600"}`}>
-          {state.message}
-        </div>
-      ) : null}
-
-      <p className="text-xs text-gray-500">
-        Calls <code>/api/admin/reports/gw/generate</code> with server secret.
-      </p>
+      {state.message && (
+        <p className={state.ok ? "text-green-600" : "text-red-600"}>{state.message}</p>
+      )}
     </form>
   );
 }
 
-export function SweepForm({ secretConfigured }: { secretConfigured: boolean }) {
-  const [state, setState] = useState<ActionState>({ ok: false, message: "" });
-  const [pending, start] = useTransition();
+export function SweepForm() {
+  const [state, setState] = React.useState<ActionState>({ ok: false, message: "" });
+  const [pending, start] = (React as any).useTransition(); // no TS fuss
 
-  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+  function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     start(async () => {
+      // IMPORTANT: server action takes ONE arg (prev state)
       const res = await sweepMissingReportsAction(state);
       setState(res);
     });
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-3 border rounded p-4">
-      <h3 className="text-lg font-medium">Generate Missing Reports</h3>
-      <p className="text-sm text-gray-600">
-        Sweeps gameweeks in the last ~36h and creates any missing reports.
-      </p>
-      {!secretConfigured && (
-        <p className="text-xs text-amber-600">
-          Tip: set <code>CRON_SECRET</code> in Vercel so this can run in prod.
-        </p>
+    <form onSubmit={onSubmit} className="space-y-3">
+      <h2 className="text-xl font-semibold">Sweep Missing Reports</h2>
+      <button className="btn btn-secondary" disabled={pending} type="submit">
+        {pending ? "Sweeping..." : "Sweep now"}
+      </button>
+      {state.message && (
+        <p className={state.ok ? "text-green-600" : "text-red-600"}>{state.message}</p>
       )}
-
-      <RunBtn pending={pending}>Sweep Now</RunBtn>
-
-      {state.message ? (
-        <div className={`text-sm ${state.ok ? "text-emerald-600" : "text-rose-600"}`}>
-          {state.message}
-        </div>
-      ) : null}
     </form>
+  );
+}
+
+export default function ActionForms({
+  seasons,
+}: {
+  seasons: string[];
+}) {
+  return (
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div className="p-4 border rounded-md">
+        <GwForm seasons={seasons} />
+      </div>
+      <div className="p-4 border rounded-md">
+        <SweepForm />
+      </div>
+    </div>
   );
 }
