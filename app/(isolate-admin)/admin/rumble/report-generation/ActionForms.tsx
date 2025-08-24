@@ -87,7 +87,7 @@ export function SweepForm({ secretConfigured }: { secretConfigured: boolean }) {
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     start(async () => {
-      const res = await sweepMissingReportsAction(state, new FormData());
+      const res = await sweepMissingReportsAction(state);
       setState(res);
     });
   }
