@@ -26,47 +26,59 @@ header,
 
 
 /* === Haven brand tokens (light & dark) === */
+/* === Haven brand tokens (slightly darker baseline) === */
 :root{
-  --brand-navy:#0f2a43;      /* from your logo */
-  --brand-amber:#f59f0b;
-  --brand-coral:#f97316;
-  --brand-emerald:#16a34a;
-  --surface:#f8fafc;         /* fallback background */
-  --card:255,255,255;        /* r,g,b for alpha cards */
-  --ink:#0f172a;
+  --brand-navy:#0b1f33;
+  --brand-amber:#d97706;
+  --brand-coral:#ea580c;
+  --brand-emerald:#0f9d58;
+
+  --surface:#f4f6fa;     /* light background base */
+  --card:248,250,252;    /* r,g,b for alpha cards (lighter than white) */
+  --ink:#0e1420;
 }
-@media(prefers-color-scheme:dark){
+@media (prefers-color-scheme: dark){
   :root{
-    --surface:#0b1220;
-    --card:15,23,42;
-    --ink:#e5edf7;
+    --surface:#0b1220;   /* dark background base */
+    --card:17,24,39;     /* darker card base */
+    --ink:#e7eef9;
   }
 }
 
-/* Cards & buttons keep the site consistent (you’re already close) */
+/* Cards / buttons (slightly darker shadows, more opacity) */
 @layer components{
-  .hg-card{@apply rounded-2xl border shadow-sm; background-color: rgba(var(--card),0.70);}
-  .hg-btn{ @apply inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-white text-slate-800 hover:bg-slate-50; }
-  .hg-accent{ @apply ring-1 ring-amber-400/40 hover:ring-amber-400/60; }
+  .hg-card{
+    border: 1px solid rgba(15,23,42,.08);
+    border-radius: 1rem;
+    background-color: rgba(var(--card), .84);
+    box-shadow: 0 8px 24px rgba(2,6,23,.06);
+  }
+  .hg-btn{
+    display:inline-flex; align-items:center; gap:.5rem;
+    padding:.4rem .75rem; border-radius:.6rem;
+    background: rgba(255,255,255,.9);
+    border:1px solid rgba(15,23,42,.10);
+  }
 }
 
-/* Subtle colored bottom border under the header */
-.site-header-underline{
-  position: relative;
-}
+/* Header underline tint (keeps header tied to theme) */
+.site-header-underline{ position:relative; }
 .site-header-underline::after{
   content:""; position:absolute; left:0; right:0; bottom:-1px; height:2px;
   background: linear-gradient(90deg, var(--brand-emerald), var(--brand-amber), var(--brand-coral));
-  opacity:.35;
+  opacity:.55;
 }
+
 
 body{
   background:
-    linear-gradient(165deg,
-      color-mix(in oklab, var(--brand-emerald) 10%, transparent) 0%,
-      transparent 40%,
-      color-mix(in oklab, var(--brand-navy) 8%, transparent) 100%
-    ),
+    radial-gradient(1200px 640px at 50% -180px,
+      color-mix(in oklab, var(--brand-amber) 32%, transparent),
+      transparent 62%),
+    radial-gradient(900px 720px at 110% 10%,
+      color-mix(in oklab, var(--brand-coral) 28%, transparent),
+      transparent 65%),
+    linear-gradient(to bottom, rgba(2,6,23,.02), rgba(2,6,23,.08)),
     var(--surface);
 }
 
