@@ -12,20 +12,74 @@ function cookieDomainForProd(host?: string | null) {
   return undefined;
 }
 
+type LooseLoginBody = Partial<{
+  code: string;
+  joinCode: string;
+  join_code: string;
+  secret: string;
+  secretCode: string;
+  secret_code: string;
+}>;
+
+function pickFirst(...vals: (string | null | undefined)[]) {
+  for (const v of vals) {
+    const s = typeof v === "string" ? v.trim() : "";
+    if (s) return s;
+  }
+  return "";
+}
+
 export async function POST(req: Request) {
   try {
-    const { code, secret } = await req.json();
+    let body: LooseLoginBody = {};
+    const ct = req.headers.get("content-type") || "";
 
-    const joinCode = String(code || "").trim();
-    const secretCode = String(secret || "").trim();
+    // Accept JSON
+    if (ct.includes("application/json")) {
+      try {
+        body = (await req.json()) ?? {};
+      } catch {
+        body = {};
+      }
+    }
+    // Accept form posts (default <form method="POST">)
+    else if (
+      ct.includes("application/x-www-form-urlencoded") ||
+      ct.includes("multipart/form-data")
+    ) {
+      const form = await req.formData();
+      body = {
+        code: (form.get("code") as string) ?? undefined,
+        joinCode: (form.get("joinCode") as string) ?? undefined,
+        join_code: (form.get("join_code") as string) ?? undefined,
+        secret: (form.get("secret") as string) ?? undefined,
+        secretCode: (form.get("secretCode") as string) ?? undefined,
+        secret_code: (form.get("secret_code") as string) ?? undefined,
+      };
+    }
+    // As a last resort, accept query params (handy for quick tests)
+    else {
+      const url = new URL(req.url);
+      body = {
+        code: url.searchParams.get("code") ?? undefined,
+        joinCode: url.searchParams.get("joinCode") ?? undefined,
+        join_code: url.searchParams.get("join_code") ?? undefined,
+        secret: url.searchParams.get("secret") ?? undefined,
+        secretCode: url.searchParams.get("secretCode") ?? undefined,
+        secret_code: url.searchParams.get("secret_code") ?? undefined,
+      };
+    }
 
-    if (!joinCode || !secretCode) {
+    const code = pickFirst(body.code, body.joinCode, body.join_code);
+    const secret = pickFirst(body.secret, body.secretCode, body.secret_code);
+
+    if (!code || !secret) {
       return NextResponse.json({ ok: false, error: "Missing fields" }, { status: 400 });
     }
 
-    // Your schema: User has joinCode and secretCode (both unique in practice)
+    // Your schema: User has joinCode + secretCode
     const user = await db.user.findFirst({
-      where: { joinCode, secretCode },
+      where: { joinCode: code, secretCode: secret },
       select: { id: true, name: true, email: true, isAdmin: true },
     });
 
