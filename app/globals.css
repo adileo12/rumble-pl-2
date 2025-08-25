@@ -2,3 +2,24 @@
 @tailwind components;
 @tailwind utilities;
 html, body { height: 100%; }
+
+/* --- Haven global header layering & polish --- */
+header,
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;               /* above watermark (z-0) and content wrapper (z-10) */
+  background-color: rgba(255,255,255,0.80);
+  -webkit-backdrop-filter: saturate(180%) blur(6px);
+  backdrop-filter: saturate(180%) blur(6px);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08); /* subtle border */
+}
+
+/* optional: keep header text/icons crisp on dark */
+@media (prefers-color-scheme: dark) {
+  header,
+  .site-header {
+    background-color: rgba(15,23,42,0.60);
+    border-bottom-color: rgba(255,255,255,0.08);
+  }
+}
