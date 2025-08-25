@@ -9,7 +9,7 @@ export const revalidate = 0;
 type NextGw = { seasonId: string; gwNumber: number; deadline?: Date | string | null };
 type LatestReport = { seasonId: string; gwNumber: number; updatedAt?: Date | string | null };
 
-// ---- helpers ----
+/* ---------- small utils ---------- */
 function greetByTime(d = new Date()) {
   const h = d.getHours();
   if (h < 5) return "Good night";
@@ -44,6 +44,7 @@ function relTo(d?: Date | string | null) {
   return diffMs >= 0 ? `in ${s.trim()}` : `${s.trim()} ago`;
 }
 
+/* ---------- data ---------- */
 async function fetchNextGw(): Promise<NextGw | null> {
   const anyDb = db as any;
   const now = new Date();
@@ -76,29 +77,41 @@ async function fetchLatestReport(): Promise<LatestReport | null> {
   }
 }
 
-// admin detection via your existing /api/auth/me
-async function fetchIsAdmin(): Promise<boolean> {
+/** Get current viewer's name + isAdmin from /api/auth/me */
+async function fetchViewer(): Promise<{ name: string | null; isAdmin: boolean }> {
   try {
     const h = headers();
     const host = h.get("host");
     const protocol = process.env.VERCEL ? "https" : "http";
-    const url = `${protocol}://${host}/api/auth/me`;
-    const res = await fetch(url, {
+    const res = await fetch(`${protocol}://${host}/api/auth/me`, {
       headers: { cookie: cookies().toString() },
       cache: "no-store",
     });
-    if (!res.ok) return false;
-    const data = await res.json();
-    const u = (data?.user ?? data) as any;
+    if (!res.ok) return { name: null, isAdmin: false };
+    const payload = await res.json();
+    const u = (payload?.user ?? payload) as any;
+
+    // Derive a nice display name from common fields
+    const name =
+      u?.name ??
+      u?.fullName ??
+      (u?.firstName && u?.lastName ? `${u.firstName} ${u.lastName}` : undefined) ??
+      u?.username ??
+      (typeof u?.email === "string" ? u.email.split("@")[0] : null) ??
+      null;
+
     const role =
       u?.role ?? u?.userRole ?? u?.status?.role ?? u?.UserStatus?.role ?? null;
-    const flag = u?.isAdmin === true || u?.admin === true || u?.is_admin === true;
-    return flag || role === "admin";
+    const isAdmin =
+      u?.isAdmin === true || u?.admin === true || u?.is_admin === true || role === "admin";
+
+    return { name, isAdmin };
   } catch {
-    return false;
+    return { name: null, isAdmin: false };
   }
 }
 
+/* ---------- UI bits ---------- */
 function Tile({
   href,
   title,
@@ -124,29 +137,31 @@ function Tile({
     </div>
   );
   return external ? (
-    <a href={href} target="_blank" rel="noreferrer">{content}</a>
+    <a href={href} target="_blank" rel="noreferrer">
+      {content}
+    </a>
   ) : (
     <Link href={href}>{content}</Link>
   );
 }
 
-// ---- page ----
+/* ---------- page ---------- */
 export default async function Home() {
-  const greeting = greetByTime();
-
-  const [nextGw, latest, isAdmin] = await Promise.all([
+  const [nextGw, latest, viewer] = await Promise.all([
     fetchNextGw(),
     fetchLatestReport(),
-    fetchIsAdmin(),
+    fetchViewer(),
   ]);
+
+  const greeting = viewer.name
+    ? `Welcome, ${viewer.name}, to Haven Games 👋`
+    : `${greetByTime()}, welcome to Haven Games 👋`;
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
       {/* Hero */}
       <div className="mb-8 rounded-3xl border bg-gradient-to-br from-white to-sky-50 p-6 md:p-8">
-        <div className="text-3xl md:text-4xl font-bold mb-2">
-          {greeting}, welcome to Haven Games 👋
-        </div>
+        <div className="text-3xl md:text-4xl font-bold mb-2">{greeting}</div>
         <p className="text-slate-700">
           Make your pick, track reports, and keep an eye on deadlines — all in one place.
         </p>
@@ -202,7 +217,7 @@ export default async function Home() {
                 >
                   View public report →
                 </Link>
-                {isAdmin && (
+                {viewer.isAdmin && (
                   <Link
                     href={`/admin/rumble/report-generation/${encodeURIComponent(latest.seasonId)}/${latest.gwNumber}`}
                     className="inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-1.5 text-sm hover:bg-slate-50"
@@ -227,7 +242,7 @@ export default async function Home() {
           <Tile href="/rumble/reports" title="Reports" desc="Browse public gameweek reports." emoji="📊" />
           <Tile href="/profile" title="Profile" desc="Account info and preferences." emoji="👤" />
 
-          {isAdmin && (
+          {viewer.isAdmin && (
             <>
               <Tile href="/admin" title="Admin" desc="Tools & report generation." emoji="🛠️" />
               <Tile
