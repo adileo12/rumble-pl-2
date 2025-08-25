@@ -1,6 +1,13 @@
 import "./globals.css";
 import type { ReactNode } from "react";
 import SiteHeader from "@/src/components/site-header";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_BASE_URL ?? "https://havengames.org"),
+  title: "Haven Games",
+  description: "Make your pick, track reports, and keep an eye on deadlines — all in one place.",
+};
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
