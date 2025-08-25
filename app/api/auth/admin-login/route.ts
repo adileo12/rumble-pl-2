@@ -45,7 +45,7 @@ export async function POST(req: Request) {
     }
 
     // Set session cookie (valid on apex + www in prod)
-    cookies().set("sid", String(admin.id), sessionCookieOptions(req));
+    cookies().set("sid", String(admin.id), sessionCookieOptions());
 
     return NextResponse.json({
       ok: true,
