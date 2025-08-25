@@ -1,6 +1,6 @@
 "use client";
 
-import React, { Suspense, useCallback, useMemo, useState } from "react";
+import React, { Suspense, useCallback, useMemo, useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -71,7 +71,23 @@ export default function AdminApp() {
     setMsg(JSON.stringify(await r.json(), null, 2));
   }, []);
 
+  // --- NEW: load seasons and auto-fill seasonId ---
   const [seasonId, setSeasonId] = useState("");
+  const [seasons, setSeasons] = useState<string[]>([]);
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch("/api/admin/seasons", { cache: "no-store" });
+        const j = await r.json();
+        const ids: string[] = (j?.seasons ?? []).map((s: any) => s.id);
+        setSeasons(ids);
+        if (!seasonId && ids.length) setSeasonId(ids[0]); // default to first season
+      } catch {
+        // ignore
+      }
+    })();
+  }, [seasonId]);
+
   const [gwNumber, setGwNumber] = useState<number>(1);
   const processResults = useCallback(async () => {
     setMsg("Processing results…");
@@ -116,10 +132,56 @@ export default function AdminApp() {
             <div className="border rounded p-4">
               <h3 className="font-medium mb-2">Process Gameweek Results</h3>
               <div className="flex gap-2 mb-2">
-                <input value={seasonId} onChange={(e) => setSeasonId(e.target.value)} placeholder="Season ID" className="border rounded px-3 py-2 w-72" />
-                <input type="number" value={gwNumber} onChange={(e) => setGwNumber(Number(e.target.value))} placeholder="GW number" className="border rounded px-3 py-2 w-32" />
+                {/* Use a select so seasonId is always valid */}
+                <select
+                  value={seasonId}
+                  onChange={(e) => setSeasonId(e.target.value)}
+                  className="border rounded px-3 py-2 w-72"
+                >
+                  {seasons.length === 0 ? (
+                    <option value="">Loading seasons…</option>
+                  ) : (
+                    seasons.map((id) => (
+                      <option key={id} value={id}>{id}</option>
+                    ))
+                  )}
+                </select>
+
+                <input
+                  type="number"
+                  value={gwNumber}
+                  onChange={(e) => setGwNumber(Number(e.target.value))}
+                  placeholder="GW number"
+                  className="border rounded px-3 py-2 w-32"
+                />
               </div>
-              <Button onClick={processResults}>Run</Button>
+              <div className="flex items-center gap-3">
+                <Button onClick={processResults}>Run</Button>
+                {/* quick helper link to see valid GWs for the selected season */}
+                {seasonId && (
+                  <a
+                    className="text-sm text-slate-600 underline"
+                    href={`/api/admin/seasons/${seasonId}/gameweeks`}
+                    target="_blank" rel="noreferrer"
+                  >
+                    View valid GW numbers
+                  </a>
+                )}
+              </div>
+            </div>
+
+            {/* Link to server-rendered reports UI */}
+            <div className="border rounded p-4">
+              <h3 className="font-medium mb-2">New: Charts &amp; Eliminations</h3>
+              <p className="text-sm text-gray-600 mb-3">
+                Open the server-powered reporting UI that generates and displays pie charts and the eliminated list.
+              </p>
+              <Link
+                href="/admin/rumble/report-generation"
+                className="inline-block rounded-xl bg-slate-900 px-4 py-2 text-white hover:bg-slate-800"
+              >
+                Open Report Generator
+              </Link>
             </div>
           </div>
         </div>
@@ -137,7 +199,7 @@ export default function AdminApp() {
         </p>
       </div>
     );
-  }, [gwNumber, processResults, seasonId, section, seedClubs, syncFixtures]);
+  }, [gwNumber, processResults, seasonId, seasons, section, seedClubs, syncFixtures]);
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-6">
