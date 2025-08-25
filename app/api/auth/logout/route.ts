@@ -1,15 +1,14 @@
 import { NextResponse } from "next/server";
-import { sessionCookieOptions } from "@/src/lib/session-cookie";
 
-export async function POST() {
+export async function POST(req: Request) {
   const res = NextResponse.json({ ok: true });
-  const opts = sessionCookieOptions();
-  // clear both legacy and current cookies if present
- cookies().set("session", "", {
-    ...opts,
-    maxAge: 0,
-    expires: new Date(0),
-  });
+  const host = new URL(req.url).host || "";
 
-  return NextResponse.json({ ok: true });
+  const base = { path: "/", httpOnly: true, sameSite: "lax", secure: true, maxAge: 0, expires: new Date(0) };
+  const withDomain = host.endsWith("havengames.org") ? { ...base, domain: ".havengames.org" } : base;
+
+  // clear both legacy and current cookies if present
+  res.cookies.set("sid", "", withDomain);
+  res.cookies.set("session", "", withDomain);
+  return res;
 }
