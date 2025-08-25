@@ -1,47 +1,55 @@
+// app/api/auth/login/route.ts
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { db } from "@/src/lib/db";
 
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
-
-// Derive the exact options type that cookies().set(...) expects
-type CookieSetOptions = Parameters<ReturnType<typeof cookies>["set"]>[2];
+function cookieDomainForProd(host?: string | null) {
+  const cfg = process.env.NEXT_PUBLIC_COOKIE_DOMAIN;
+  if (process.env.NODE_ENV !== "production") return undefined;
+  if (cfg && cfg.trim()) return cfg.trim();
+  if (!host) return undefined;
+  const h = host.toLowerCase();
+  if (h.endsWith(".havengames.org") || h === "havengames.org") return ".havengames.org";
+  return undefined;
+}
 
 export async function POST(req: Request) {
   try {
-    const { secretCode = "" } = await req.json();
-    const code = String(secretCode).trim();
+    const { code, secret } = await req.json();
 
-    if (!code) {
-      return NextResponse.json({ ok: false, error: "Missing secretCode" }, { status: 400 });
+    const joinCode = String(code || "").trim();
+    const secretCode = String(secret || "").trim();
+
+    if (!joinCode || !secretCode) {
+      return NextResponse.json({ ok: false, error: "Missing fields" }, { status: 400 });
     }
 
-    const user = await db.user.findUnique({
-      where: { secretCode: code },
-      select: { id: true, name: true, isAdmin: true },
+    // Your schema: User has joinCode and secretCode (both unique in practice)
+    const user = await db.user.findFirst({
+      where: { joinCode, secretCode },
+      select: { id: true, name: true, email: true, isAdmin: true },
     });
 
     if (!user) {
-      return NextResponse.json({ ok: false, error: "Invalid code" }, { status: 401 });
+      return NextResponse.json({ ok: false, error: "Invalid code or secret" }, { status: 401 });
     }
 
-    // Make cookie valid on both apex + www only in production
-    const host = req.headers.get("host") || "";
-    const cookieOptions: CookieSetOptions = {
+    const res = NextResponse.json({ ok: true, user });
+
+    const host = req.headers.get("host");
+    res.cookies.set({
+      name: "sid",
+      value: String(user.id),
       httpOnly: true,
       sameSite: "lax",
-      secure: true,
+      secure: process.env.NODE_ENV === "production",
       path: "/",
+      domain: cookieDomainForProd(host),
       maxAge: 60 * 60 * 24 * 30, // 30 days
-      ...(host.endsWith("havengames.org") ? { domain: ".havengames.org" } : {}),
-    };
+    });
 
-    cookies().set("sid", String(user.id), cookieOptions);
-
-    return NextResponse.json({ ok: true, user }, { status: 200 });
+    return res;
   } catch (err) {
-    console.error("[login] ERROR:", err);
+    console.error("login error", err);
     return NextResponse.json({ ok: false, error: "Server error" }, { status: 500 });
   }
 }
