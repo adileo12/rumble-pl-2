@@ -30,7 +30,7 @@ export async function POST(req: Request) {
       ...(host.endsWith("havengames.org") ? { domain: ".havengames.org" } : {}),
     };
 
-    cookies().set("sid", user.id, cookieOptions);
+    cookies().set("sid", String(user.id), sessionCookieOptions());
 
     return NextResponse.json({ ok: true, user }, { status: 200 });
   } catch (err) {
