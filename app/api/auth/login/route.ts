@@ -7,6 +7,8 @@ import { sessionCookieOptions } from "@/src/lib/session-cookie";
 export async function POST(req: Request) {
   try {
     const { secretCode = "" } = await req.json();
+    const token = "YOUR_SESSION_TOKEN";
+    cookies().set("session", token, sessionCookieOptions());
     const code = String(secretCode).trim();
     if (!code) {
       return NextResponse.json({ ok: false, error: "Missing secretCode" }, { status: 400 });
