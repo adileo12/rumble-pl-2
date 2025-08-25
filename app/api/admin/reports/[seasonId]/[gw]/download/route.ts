@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 
 export async function GET(req: Request, { params }: { params: { seasonId: string; gw: string } }) {
   const url = new URL(req.url);
-  const type = url.searchParams.get("type"); // "club" | "source" | "elims"
+  const type = url.searchParams.get("type"); // club | source | elims
   const seasonId = decodeURIComponent(params.seasonId);
   const gwNumber = Number(params.gw);
 
@@ -48,16 +48,11 @@ export async function GET(req: Request, { params }: { params: { seasonId: string
     const svg = payload?.eliminatedSvg as string | undefined;
     if (!svg) return NextResponse.json({ error: "Missing" }, { status: 404 });
 
-    // 🔁 WASM version of resvg (bundles cleanly on Vercel/Next)
     const { Resvg } = await import("@resvg/resvg-wasm");
-    const r = new Resvg(svg, {
-      fitTo: { mode: "width", value: 1400 },
-      background: "white",
-    });
-    const pngU8 = r.render().asPng(); // Uint8Array
-    const buf = Buffer.from(pngU8);
+    const r = new Resvg(svg, { fitTo: { mode: "width", value: 1400 }, background: "white" });
+    const png = Buffer.from(r.render().asPng());
 
-    return new NextResponse(buf, {
+    return new NextResponse(png, {
       status: 200,
       headers: {
         "Content-Type": "image/png",
