@@ -1,3 +1,4 @@
+// app/layout.tsx
 import "./globals.css";
 import type { ReactNode } from "react";
 
@@ -8,7 +9,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body className="min-h-screen bg-slate-50">
-        {/* GLOBAL WATERMARK (background layer) */}
+        {/* GLOBAL WATERMARK (background on all pages) */}
         <div
           aria-hidden
           className="fixed inset-0 z-0 flex items-center justify-center pointer-events-none"
