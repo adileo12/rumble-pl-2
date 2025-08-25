@@ -1,11 +1,8 @@
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-
-import { cookies } from "next/headers";
+// app/page.tsx
 import { redirect } from "next/navigation";
 
+export const dynamic = "force-dynamic";
+
 export default function Root() {
-  const sid = cookies().get("sid")?.value;
-  if (sid) return redirect("/home");
-  return redirect("/login");
+  redirect("/home"); // send logged-in users to our Home dashboard
 }

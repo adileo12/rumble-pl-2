@@ -1,42 +1,38 @@
 import "./globals.css";
-import Image from "next/image";
-import Link from "next/link";
+import type { ReactNode } from "react";
+import SiteHeader from "@/src/components/site-header";
 
-export const revalidate = false;
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <body className="min-h-screen flex flex-col bg-white text-slate-900">
-        {/* Single, persistent brand header */}
-        <header className="w-full border-b bg-white/90 backdrop-blur py-4">
-          <Link
-            href="/home"
-            aria-label="Haven Games Home"
-            className="group mx-auto flex max-w-5xl items-center justify-center gap-3 px-4 no-underline text-inherit hover:opacity-90"
-          >
-            <span className="select-none text-2xl sm:text-3xl font-extrabold tracking-tight">
-              HAVEN
-            </span>
-            <Image
-              src="/haven-logo.png"
-              alt="Haven Games Logo"
-              width={44}
-              height={44}
-              priority
-              className="object-contain"
-            />
-            <span className="select-none text-2xl sm:text-3xl font-extrabold tracking-tight">
-              GAMES
-            </span>
-          </Link>
-        </header>
+      <body className="min-h-screen bg-slate-50">
+        {/* GLOBAL WATERMARK (background on all pages) */}
+        <div
+          aria-hidden
+          className="fixed inset-0 z-0 flex items-center justify-center pointer-events-none"
+        >
+          <div
+            className="
+              bg-[url('/brand/haven-logo.png')]
+              bg-no-repeat bg-center bg-contain
+              opacity-[0.06] dark:opacity-[0.08]
+              w-[60vw] max-w-[720px] h-[60vw] max-h-[720px]
+            "
+          />
+        </div>
 
-        <main className="flex-1">{children}</main>
+        {/* EVERYTHING visible sits above the watermark */}
+        <div className="relative z-10">
+          {/* HEADER always on top */}
+          <SiteHeader />
+
+          {/* PAGE CONTENT */}
+          {children}
+        </div>
       </body>
     </html>
   );
 }
-
-console.log("[tripwire] app/layout.tsx -> revalidate =", revalidate, "dynamic =", dynamic ?? "(none)");
