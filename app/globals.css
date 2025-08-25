@@ -60,3 +60,10 @@ header,
   opacity:.35;
 }
 
+body{
+  background:
+    radial-gradient(1200px 600px at 50% -200px, color-mix(in oklab, var(--brand-amber) 18%, transparent), transparent 60%),
+    radial-gradient(800px 600px at 120% 20%, color-mix(in oklab, var(--brand-coral) 16%, transparent), transparent 65%),
+    var(--surface);
+}
+
