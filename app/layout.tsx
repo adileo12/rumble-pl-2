@@ -1,6 +1,6 @@
-// app/layout.tsx
 import "./globals.css";
 import type { ReactNode } from "react";
+import SiteHeader from "@/src/components/site-header";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -24,8 +24,12 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           />
         </div>
 
-        {/* Everything visible goes above the watermark */}
+        {/* EVERYTHING visible sits above the watermark */}
         <div className="relative z-10">
+          {/* HEADER always on top */}
+          <SiteHeader />
+
+          {/* PAGE CONTENT */}
           {children}
         </div>
       </body>
