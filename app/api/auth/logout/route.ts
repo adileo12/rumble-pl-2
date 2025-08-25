@@ -8,7 +8,7 @@ export async function POST(req: Request) {
   const withDomain = host.endsWith("havengames.org") ? { ...base, domain: ".havengames.org" } : base;
 
   // clear both legacy and current cookies if present
-  res.cookies.set("sid", "", withDomain);
+  res.cookies().set("sid", "", { ...sessionCookieOptions(), maxAge: 0, expires: new Date(0) });;
   res.cookies.set("session", "", withDomain);
   return res;
 }
