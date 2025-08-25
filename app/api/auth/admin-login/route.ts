@@ -2,12 +2,15 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { db } from "@/src/lib/db"; // <- keep this path consistent with your project
+import { sessionCookieOptions } from "@/src/lib/session-cookie";
 
 export async function POST(req: Request) {
   try {
     const { email = "", password = "" } = await req.json();
+     const token = "YOUR_SESSION_TOKEN";
     const e = String(email).trim().toLowerCase();
     const p = String(password);
+    cookies().set("session", token, sessionCookieOptions());
 
     if (!e || !p) {
       return NextResponse.json(
