@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { db } from "@/src/lib/db";
+import { sessionCookieOptions } from "@/src/lib/session-cookie";
 
 export async function POST(req: Request) {
   try {
