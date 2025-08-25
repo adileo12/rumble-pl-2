@@ -1,40 +1,77 @@
-// app/api/rumble/lazarus/activate/route.ts
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { headers, cookies } from "next/headers";
 import { db } from "@/src/lib/db";
-import { computeDeadline } from "@/src/lib/rumble";
 
-export async function POST() {
-  const sid = (await cookies()).get("sid")?.value;
-  if (!sid) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
-  const season = await db.season.findFirst({ where: { isActive: true }, select: { id: true } });
-  if (!season) return NextResponse.json({ ok: false, error: "No active season" }, { status: 400 });
-
-  const st = await db.rumbleState.findUnique({
-    where: { userId_seasonId: { userId: sid, seasonId: season.id } },
-    select: { lazarusUsed: true, eliminatedAtGw: true },
-  });
-  if (!st?.eliminatedAtGw) return NextResponse.json({ ok: false, error: "You are not eliminated" }, { status: 400 });
-  if (st.lazarusUsed) return NextResponse.json({ ok: false, error: "Lazarus already used" }, { status: 400 });
-
-  const nextGw = await db.gameweek.findFirst({
-    where: { seasonId: season.id, number: { gt: st.eliminatedAtGw } },
-    orderBy: { number: "asc" },
-    select: { id: true, number: true },
-  });
-  if (!nextGw) return NextResponse.json({ ok: false, error: "No next gameweek" }, { status: 400 });
-
-  const kicks = await db.fixture.findMany({ where: { gwId: nextGw.id }, select: { kickoff: true } });
-  const { deadline } = computeDeadline(kicks.map(k => k.kickoff));
-  if (!deadline || Date.now() > deadline.getTime()) {
-    return NextResponse.json({ ok: false, error: "Lazarus window has closed" }, { status: 400 });
+async function getViewer() {
+  try {
+    const h = headers();
+    const host = h.get("host");
+    const protocol = process.env.VERCEL ? "https" : "http";
+    const r = await fetch(`${protocol}://${host}/api/auth/me`, {
+      headers: { cookie: cookies().toString() },
+      cache: "no-store",
+    });
+    if (!r.ok) return null;
+    const j = await r.json();
+    return (j?.user ?? j) as any;
+  } catch {
+    return null;
   }
+}
 
-  await db.rumbleState.update({
-    where: { userId_seasonId: { userId: sid, seasonId: season.id } },
-    data: { lazarusUsed: true, eliminatedAtGw: null, eliminatedAt: null },
-  });
+export async function POST(req: Request) {
+  try {
+    const viewer = await getViewer();
+    if (!viewer?.id) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
 
-  return NextResponse.json({ ok: true });
+    const { seasonId } = await req.json();
+    if (!seasonId) return NextResponse.json({ ok: false, error: "Missing seasonId" }, { status: 400 });
+
+    const anyDb = db as any;
+    const lazClient = anyDb.rumbleLazarus ?? anyDb.RumbleLazarus ?? null;
+    const elimClient = anyDb.rumbleElimination ?? anyDb.RumbleElimination ?? null;
+
+    if (!lazClient) {
+      return NextResponse.json({ ok: false, error: "Lazarus store not configured" }, { status: 409 });
+    }
+
+    const laz = await lazClient.findUnique({
+      where: { seasonId_userId: { seasonId, userId: viewer.id } },
+      select: { used: true, eligibleFrom: true, eligibleUntil: true },
+    });
+
+    if (!laz) {
+      return NextResponse.json({ ok: false, error: "Not eligible" }, { status: 409 });
+    }
+    if (laz.used) {
+      return NextResponse.json({ ok: false, error: "Already used" }, { status: 409 });
+    }
+
+    const now = new Date();
+    if (laz.eligibleFrom && now < new Date(laz.eligibleFrom)) {
+      return NextResponse.json({ ok: false, error: "Window not open yet" }, { status: 409 });
+    }
+    if (laz.eligibleUntil && now > new Date(laz.eligibleUntil)) {
+      return NextResponse.json({ ok: false, error: "Window expired" }, { status: 409 });
+    }
+
+    // Mark lazarus used + clear elimination (if you persist eliminations)
+    await lazClient.update({
+      where: { seasonId_userId: { seasonId, userId: viewer.id } },
+      data: { used: true, usedAt: now },
+    });
+
+    if (elimClient) {
+      await elimClient.deleteMany({
+        where: { seasonId, userId: viewer.id },
+      });
+    }
+
+    return NextResponse.json({ ok: true, revived: true });
+  } catch (err: any) {
+    return NextResponse.json({ ok: false, error: err?.message ?? "Internal error" }, { status: 500 });
+  }
 }

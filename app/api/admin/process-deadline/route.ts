@@ -1,72 +1,148 @@
 import { NextResponse } from "next/server";
 import { db } from "@/src/lib/db";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+// Choose first unused club alphabetically by name
+async function pickProxyClubForUser(seasonId: string, userId: string) {
+  const anyDb = db as any;
+  const clubClient = anyDb.club ?? anyDb.Club;
+  const pickClient = anyDb.rumblePick ?? anyDb.RumblePick ?? anyDb.pick ?? anyDb.Pick;
+
+  const [clubs, used] = await Promise.all([
+    clubClient.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    pickClient.findMany({ where: { seasonId, userId }, select: { clubId: true } }),
+  ]);
+
+  const usedIds = new Set(used.map((p: any) => String(p.clubId)));
+  const candidate = clubs.find((c: any) => !usedIds.has(String(c.id)));
+  return candidate ?? null;
+}
+
+async function countProxiesUsed(seasonId: string, userId: string) {
+  const anyDb = db as any;
+  const pickClient = anyDb.rumblePick ?? anyDb.RumblePick ?? anyDb.pick ?? anyDb.Pick;
+  const count = await pickClient.count({
+    where: { seasonId, userId, submissionSource: "proxy" },
+  });
+  return count as number;
+}
+
 export async function POST(req: Request) {
-  const { seasonId, gwNumber } = await req.json().catch(() => ({} as any));
-  if (!seasonId || typeof gwNumber !== "number") {
-    return NextResponse.json({ ok: false, error: "seasonId and gwNumber are required" }, { status: 400 });
-  }
+  try {
+    const anyDb = db as any;
+    const gwClient = anyDb.gameweek ?? anyDb.Gameweek;
+    const pickClient = anyDb.rumblePick ?? anyDb.RumblePick ?? anyDb.pick ?? anyDb.Pick;
+    const elimClient =
+      anyDb.rumbleElimination ?? anyDb.RumbleElimination ?? null; // optional if you have it
 
-  const gw = await db.gameweek.findFirst({
-    where: { seasonId, number: gwNumber },
-    select: { id: true, number: true, deadline: true },
-  });
-  if (!gw) return NextResponse.json({ ok: false, error: "GW not found" }, { status: 404 });
-  if (new Date() < gw.deadline) {
-    return NextResponse.json({ ok: false, error: "Deadline not passed yet" }, { status: 400 });
-  }
+    const { seasonId } = await req.json();
+    if (!seasonId) return NextResponse.json({ ok: false, error: "Missing seasonId" }, { status: 400 });
 
-  const users = await db.user.findMany({ select: { id: true } });
-  const seasonClubs = await db.club.findMany({
-    where: { active: true },
-    select: { id: true, shortName: true },
-    orderBy: { shortName: "asc" },
-  });
+    // Find the most recent GW whose deadline is <= now and not yet swept
+    const now = new Date();
 
-  let proxied = 0;
-  let eliminated = 0;
-
-  for (const u of users) {
-    const hasPick = await db.pick.findFirst({ where: { userId: u.id, gwId: gw.id }, select: { id: true } });
-    if (hasPick) continue;
-
-    const st = await db.rumbleState.upsert({
-      where: { userId_seasonId: { userId: u.id, seasonId } },
-      update: {},
-      create: { userId: u.id, seasonId },
-      select: { proxiesUsed: true },
+    const gw = await gwClient.findFirst({
+      where: { seasonId, deadline: { lte: now } },
+      orderBy: { deadline: "desc" },
+      select: { gwNumber: true, deadline: true, isActive: true, sweptAt: true },
     });
 
-    if (st.proxiesUsed < 2) {
-      const used = new Set(
-        (await db.pick.findMany({ where: { userId: u.id, seasonId }, select: { clubId: true } }))
-          .map(p => p.clubId)
-      );
-      const choice = seasonClubs.find(c => !used.has(c.id));
-      if (!choice) continue; // nothing left to auto-pick
-
-      await db.pick.create({
-        data: {
-          userId: u.id,
-          seasonId,
-          gwId: gw.id,
-          clubId: choice.id,
-          source: "PROXY",
-        },
+    if (!gw) return NextResponse.json({ ok: false, error: "No past-deadline GW found" }, { status: 404 });
+    if (gw.sweptAt) {
+      // Already processed; still ensure the next GW is active.
+      const next = await gwClient.findFirst({
+        where: { seasonId, deadline: { gt: gw.deadline } },
+        orderBy: { deadline: "asc" },
+        select: { gwNumber: true },
       });
-      await db.rumbleState.update({
-        where: { userId_seasonId: { userId: u.id, seasonId } },
-        data: { proxiesUsed: { increment: 1 } },
-      });
-      proxied++;
-    } else {
-      await db.rumbleState.update({
-        where: { userId_seasonId: { userId: u.id, seasonId } },
-        data: { eliminatedAtGw: gw.number, eliminatedAt: new Date() },
-      });
-      eliminated++;
+      if (next) {
+        await gwClient.updateMany({
+          where: { seasonId },
+          data: { isActive: false },
+        });
+        await gwClient.update({
+          where: { seasonId_gwNumber: { seasonId, gwNumber: next.gwNumber } },
+          data: { isActive: true },
+        });
+      }
+      return NextResponse.json({ ok: true, info: "Already swept" });
     }
-  }
 
-  return NextResponse.json({ ok: true, proxied, eliminated });
+    // Fetch all players in the season (alive or eliminated — we will skip already eliminated if you track it)
+    const userClient = anyDb.user ?? anyDb.User;
+    const players = await userClient.findMany({
+      select: { id: true },
+    });
+
+    // For each player, ensure a pick exists, else proxy or eliminate
+    for (const u of players) {
+      const existing = await pickClient.findFirst({
+        where: { seasonId, gwNumber: gw.gwNumber, userId: u.id },
+        select: { id: true },
+      });
+
+      if (existing) continue;
+
+      const used = await countProxiesUsed(seasonId, u.id);
+      if (used < 2) {
+        // assign proxy
+        const proxyClub = await pickProxyClubForUser(seasonId, u.id);
+        if (proxyClub) {
+          await pickClient.create({
+            data: {
+              seasonId,
+              gwNumber: gw.gwNumber,
+              userId: u.id,
+              clubId: proxyClub.id,
+              submissionSource: "proxy",
+            },
+          });
+        } else {
+          // No clubs left — eliminate immediately
+          if (elimClient) {
+            await elimClient.upsert({
+              where: { seasonId_userId: { seasonId, userId: u.id } },
+              update: { reason: "no-club-left", gwNumber: gw.gwNumber, eliminatedAt: new Date() },
+              create: { seasonId, userId: u.id, reason: "no-club-left", gwNumber: gw.gwNumber, eliminatedAt: new Date() },
+            });
+          }
+        }
+      } else {
+        // proxies exhausted — eliminate for missed submission
+        if (elimClient) {
+          await elimClient.upsert({
+            where: { seasonId_userId: { seasonId, userId: u.id } },
+            update: { reason: "missed-no-proxy", gwNumber: gw.gwNumber, eliminatedAt: new Date() },
+            create: { seasonId, userId: u.id, reason: "missed-no-proxy", gwNumber: gw.gwNumber, eliminatedAt: new Date() },
+          });
+        }
+      }
+    }
+
+    // Flip active GW: next upcoming becomes active
+    const next = await gwClient.findFirst({
+      where: { seasonId, deadline: { gt: gw.deadline } },
+      orderBy: { deadline: "asc" },
+      select: { gwNumber: true },
+    });
+    if (next) {
+      await gwClient.updateMany({ where: { seasonId }, data: { isActive: false } });
+      await gwClient.update({
+        where: { seasonId_gwNumber: { seasonId, gwNumber: next.gwNumber } },
+        data: { isActive: true },
+      });
+    }
+
+    // Mark swept
+    await gwClient.update({
+      where: { seasonId_gwNumber: { seasonId, gwNumber: gw.gwNumber } },
+      data: { sweptAt: new Date() },
+    });
+
+    return NextResponse.json({ ok: true, sweptGw: gw.gwNumber, nextGw: next?.gwNumber ?? null });
+  } catch (err: any) {
+    return NextResponse.json({ ok: false, error: err?.message ?? "Internal error" }, { status: 500 });
+  }
 }
