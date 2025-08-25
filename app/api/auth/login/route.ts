@@ -1,15 +1,18 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import type { ResponseCookie } from "next/dist/compiled/@edge-runtime/cookies";
 import { db } from "@/src/lib/db";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+// Derive the exact options type that cookies().set(...) expects
+type CookieSetOptions = Parameters<ReturnType<typeof cookies>["set"]>[2];
+
 export async function POST(req: Request) {
   try {
     const { secretCode = "" } = await req.json();
     const code = String(secretCode).trim();
+
     if (!code) {
       return NextResponse.json({ ok: false, error: "Missing secretCode" }, { status: 400 });
     }
@@ -23,9 +26,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: "Invalid code" }, { status: 401 });
     }
 
-    // Make cookie work for both apex + www only in production
+    // Make cookie valid on both apex + www only in production
     const host = req.headers.get("host") || "";
-    const cookieOptions: ResponseCookie = {
+    const cookieOptions: CookieSetOptions = {
       httpOnly: true,
       sameSite: "lax",
       secure: true,
