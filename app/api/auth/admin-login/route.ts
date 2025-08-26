@@ -3,6 +3,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import bcrypt from "bcryptjs";
 import { db } from "@/src/lib/db";// keep your existing prisma client import
+import { sessionCookieOptionsForHost } from "@/src/lib/auth";
+
+const host = req.headers.get("host");
+const opts = sessionCookieOptionsForHost(host);
+
+const jar = cookies();
+jar.set("sid", String(user.id), opts);
 
 // make cookie valid on apex + www in prod
 function cookieOptsFor(host: string) {
