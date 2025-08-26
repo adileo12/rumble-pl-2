@@ -1,6 +1,7 @@
 // app/api/auth/admin-login/route.ts
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
+import { cookies } from "next/headers";
 import { db } from "@/src/lib/db";
 import { sessionCookieOptionsForHost } from "@/src/lib/auth";
 
@@ -20,6 +21,9 @@ export async function POST(req: Request) {
   try {
     const { email, password } = await req.json();
     const opts = sessionCookieOptionsForHost(req.headers.get("host") || "");
+     const jar = cookies();                         // ok to use .set() in route handlers
+  jar.set("session", String(admin.id), opts);
+  jar.set("sid",     String(admin.id), opts);
     const e = String(email || "").trim().toLowerCase()
     const p = String(password || "");
 
