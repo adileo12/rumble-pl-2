@@ -1,73 +1,88 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 export default function LoginInner() {
   const [code, setCode] = useState("");
+  const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const router = useRouter();
 
-  async function onSubmit(e: React.FormEvent) {
+  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setErr(null);
-    setBusy(true);
 
+    const trimmed = code.trim();
+    if (!trimmed) {
+      setErr("Please enter your secret code.");
+      return;
+    }
+
+    setLoading(true);
     try {
-      const r = await fetch("/api/auth/login", {
+      const res = await fetch("/api/auth/login", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: code.trim() }), // << key MUST be "code"
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ code: trimmed }),
       });
 
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok || !data?.ok) {
-        setErr(data?.error || "Login failed");
-        setBusy(false);
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        setErr(data?.error || "Invalid code");
+        setLoading(false);
         return;
       }
 
-      // Go wherever you land users after login
-      router.replace("/home"); // change to /dashboard if that's your home
-    } catch (e) {
-      setErr("Network error");
-      setBusy(false);
+      // success -> go home
+      window.location.href = "/home";
+    } catch {
+      setErr("Something went wrong. Please try again.");
+      setLoading(false);
     }
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4 max-w-sm mx-auto mt-16">
-      <label className="block text-sm text-slate-300">
-        Secret code
+    <div className="mx-auto max-w-xl w-full pt-16">
+      <form
+        onSubmit={onSubmit}
+        className="rounded-2xl bg-white/70 backdrop-blur border border-slate-200/70 shadow p-6 sm:p-8"
+      >
+        <label className="block text-slate-700 font-medium mb-2">
+          Secret code
+        </label>
+
         <input
-          type="text"
           value={code}
           onChange={(e) => setCode(e.target.value)}
           placeholder="Enter secret code"
-          className="mt-1 w-full px-3 py-2 rounded-md bg-slate-900 border border-slate-700 text-slate-100"
-          required
+          className="w-full rounded-md bg-slate-900 text-white placeholder:text-slate-400 px-3 py-2 outline-none"
         />
-      </label>
 
-      {err && <p className="text-rose-400 text-sm">{err}</p>}
+        <button
+          type="submit"
+          disabled={loading}
+          className="mt-5 w-full rounded-md bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 text-white font-semibold py-2.5 transition"
+        >
+          {loading ? "Signing in…" : "Sign in"}
+        </button>
 
-      <button
-        type="submit"
-        disabled={busy}
-        className="w-full py-2 rounded-md bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white"
-      >
-        {busy ? "Signing in..." : "Sign in"}
-      </button>
-    </form>
+        {err && (
+          <p className="mt-3 text-sm text-rose-600" role="alert">
+            {err}
+          </p>
+        )}
+
+        {/* New user / generate code link (INSIDE the component) */}
+        <div className="mt-4 text-sm text-slate-600">
+          New here?{" "}
+          <Link
+            href="/signup"
+            className="font-medium text-indigo-600 hover:text-indigo-500"
+          >
+            Generate a secret code
+          </Link>
+        </div>
+      </form>
+    </div>
   );
 }
-
-<div className="mt-3">
-  <Link
-    href="/signup"
-    className="inline-flex items-center gap-1 text-sm font-medium text-indigo-600 hover:text-indigo-700 underline underline-offset-4"
-  >
-    Need a code? Generate a secret code →
-  </Link>
-</div>
