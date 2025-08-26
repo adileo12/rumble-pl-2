@@ -18,7 +18,7 @@ export default async function Dashboard() {
 
   // 1) Get picks (no relation includes needed)
   const picks = await db.pick.findMany({
-    where: { userId, seasonId: season.id },
+   where: { userId: String(userId), seasonId: String(season.id) },
     include: { club: true },
     orderBy: { createdAt: "asc" },
   });
