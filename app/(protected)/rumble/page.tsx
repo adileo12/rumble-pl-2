@@ -1,47 +1,60 @@
+// app/(protected)/rumble/page.tsx
 "use client";
+
 import React, { useState } from "react";
 
-type ApiResp = { ok: boolean; error?: string; pick?: any };
+type ApiResp = { ok: boolean; error?: string };
 
-export default function RumblePage() {
-  // ⬇️ track which club is selected
+export default function RumblePlayPage() {
   const [selectedClubId, setSelectedClubId] = useState<number | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
 
-  // call /api/rumble/pick with the selected club
   async function submitPick() {
     if (!selectedClubId) {
-      alert("Pick a club first");
+      setMessage("Please select a club first.");
       return;
     }
-    const r = await fetch("/api/rumble/pick", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      credentials: "include",                      // ensure auth cookie is sent
-      body: JSON.stringify({ clubId: selectedClubId }),
-    });
-    const j: ApiResp = await r.json();
-    if (!j.ok) {
-      alert(j.error || "Failed to save pick");
-      return;
+    setSubmitting(true);
+    setMessage(null);
+    try {
+      const r = await fetch("/api/rumble/pick", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ clubId: selectedClubId }),
+      });
+      const j: ApiResp = await r.json();
+      if (!j.ok) {
+        setMessage(j.error || "Could not submit pick.");
+      } else {
+        setMessage("Pick saved!");
+      }
+    } catch {
+      setMessage("Network error.");
+    } finally {
+      setSubmitting(false);
     }
-    alert("Pick saved");
   }
 
   return (
-    <div>
-      {/* …your clubs grid… */}
-      {/* Example of wiring selection: */}
-      {/* clubs.map(c => (
-        <button
-          key={c.id}
-          onClick={() => setSelectedClubId(c.id)}
-          className={selectedClubId === c.id ? "ring-2 ring-indigo-500" : ""}
-        >
-          {c.name}
-        </button>
-      )) */}
+    <div className="max-w-5xl mx-auto px-4 py-8">
+      <h1 className="text-2xl font-semibold mb-6">Rumble · Play</h1>
 
-      <button onClick={submitPick} className="btn">Submit</button>
+      {/* TODO: your club chooser UI; ensure setSelectedClubId(<number>) is called */}
+      <div className="mb-4 text-sm text-gray-600">
+        Select a club above, then submit your pick.
+      </div>
+
+      <button
+        onClick={submitPick}
+        disabled={!selectedClubId || submitting}
+        className="inline-flex items-center rounded-md bg-indigo-600 px-4 py-2 text-white disabled:opacity-50"
+      >
+        {submitting ? "Submitting…" : "Submit Pick"}
+      </button>
+
+      {message && <div className="mt-3 text-sm">{message}</div>}
     </div>
   );
 }
