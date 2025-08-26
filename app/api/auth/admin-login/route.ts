@@ -9,47 +9,67 @@ export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
   try {
-    const { email, password } = await req.json().catch(() => ({}));
-    const e = String(email || "").trim().toLowerCase();
-    const p = String(password || "");
+    // Accept JSON *or* form-encoded POST
+    const ct = req.headers.get("content-type") || "";
+    let email = "";
+    let password = "";
 
-    if (!e || !p) {
+    if (ct.includes("application/json")) {
+      const body = await req.json().catch(() => ({} as any));
+      if (typeof body?.email === "string") email = body.email.trim().toLowerCase();
+      if (typeof body?.password === "string") password = body.password;
+    } else {
+      const form = await req.formData().catch(() => null);
+      const e = form?.get("email");
+      const p = form?.get("password");
+      if (typeof e === "string") email = e.trim().toLowerCase();
+      if (typeof p === "string") password = p;
+    }
+
+    if (!email || !password) {
       return NextResponse.json({ ok: false, error: "Missing fields" }, { status: 400 });
     }
 
-    // Be resilient to model naming differences
+    // Flexible model resolution
     const anyDb: any = db;
-    const AdminModel =
-      anyDb.admin ?? anyDb.Admin ?? anyDb.adminUser ?? anyDb.AdminUser ?? anyDb.user;
+    const adminClient =
+      anyDb.admin ?? anyDb.Admin ?? anyDb.user ?? anyDb.User ?? anyDb.users ?? anyDb.Users;
 
-    let admin: any = null;
-    if (AdminModel === anyDb.user) {
-      // Fall back: look for role 'ADMIN' on User
-      admin = await anyDb.user.findFirst({ where: { email: e, role: "ADMIN" } });
-    } else {
-      admin = await AdminModel.findUnique({ where: { email: e } });
+    if (!adminClient?.findFirst && !adminClient?.findUnique) {
+      return NextResponse.json({ ok: false, error: "Admin model not found" }, { status: 500 });
     }
+
+    // Find by email (try unique, else first)
+    const admin =
+      (await adminClient.findUnique?.({ where: { email } })) ??
+      (await adminClient.findFirst?.({ where: { email } })) ??
+      null;
 
     if (!admin) {
       return NextResponse.json({ ok: false, error: "Invalid credentials" }, { status: 401 });
     }
 
-    const hash = admin.passwordHash ?? admin.password ?? "";
-    const ok = hash && (await bcrypt.compare(p, String(hash)));
+    // Support several hash field names
+    const hash: string | undefined =
+      admin.passwordHash ?? admin.password ?? admin.passhash ?? undefined;
+
+    if (!hash) {
+      return NextResponse.json({ ok: false, error: "Password not configured" }, { status: 500 });
+    }
+
+    const ok = await bcrypt.compare(password, hash);
     if (!ok) {
       return NextResponse.json({ ok: false, error: "Invalid credentials" }, { status: 401 });
     }
 
-    // Set cookies INSIDE the handler using the request host
     const host = req.headers.get("host") || "";
     const opts = sessionCookieOptionsForHost(host);
-    const jar = cookies();
 
-    // Write both names if your app reads either
+    const jar = cookies();
     jar.set("session", String(admin.id), opts);
     jar.set("sid", String(admin.id), opts);
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, adminId: admin.id });
   } catch (err) {
     console.error("POST /api/auth/admin-login error", err);
     return NextResponse.json({ ok: false, error: "Server error" }, { status: 500 });
