@@ -1,6 +1,6 @@
 // app/(public)/login/page.tsx
 import Link from "next/link";
-import LoginInner from "./loginInner"; // keep your existing component
+import LoginInner from "./LoginInner"; // keep your existing component
 
 export const dynamic = "force-static";
 
