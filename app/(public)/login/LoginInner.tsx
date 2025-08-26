@@ -62,3 +62,12 @@ export default function LoginInner() {
     </form>
   );
 }
+
+<div className="mt-3">
+  <Link
+    href="/signup"
+    className="inline-flex items-center gap-1 text-sm font-medium text-indigo-600 hover:text-indigo-700 underline underline-offset-4"
+  >
+    Need a code? Generate a secret code →
+  </Link>
+</div>
