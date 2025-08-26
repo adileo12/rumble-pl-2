@@ -1,79 +1,68 @@
 // app/api/auth/admin-login/route.ts
-import { NextResponse } from "next/server";
-import bcrypt from "bcryptjs";
+import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { db } from "@/src/lib/db";
-import { sessionCookieOptionsForHost } from "@/src/lib/auth";
+import bcrypt from "bcryptjs";
+import { db } from "@/lib/db"; // keep your existing prisma client import
 
-function cookieDomainForProd(host?: string | null) {
-  // Use env for consistency (set on Vercel -> .env): .havengames.org
-  const cfg = process.env.NEXT_PUBLIC_COOKIE_DOMAIN;
-  if (process.env.NODE_ENV !== "production") return undefined;
-  if (cfg && cfg.trim()) return cfg.trim();
-  // fallback: infer from host header (apex or www)
-  if (!host) return undefined;
-  const h = host.toLowerCase();
-  if (h.endsWith(".havengames.org") || h === "havengames.org") return ".havengames.org";
-  return undefined;
+// make cookie valid on apex + www in prod
+function cookieOptsFor(host: string) {
+  const domain =
+    host.endsWith("havengames.org") ? ".havengames.org" :
+    host.endsWith(".vercel.app")   ? undefined : undefined;
+
+  return {
+    httpOnly: true,
+    sameSite: "lax" as const,
+    secure: true,
+    path: "/",
+    maxAge: 60 * 60 * 24 * 30, // 30 days
+    ...(domain ? { domain } : {}),
+  };
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
-    const { email, password } = await req.json();
-    const opts = sessionCookieOptionsForHost(req.headers.get("host") || "");
-     const jar = cookies();                         // ok to use .set() in route handlers
-  jar.set("session", String(admin.id), opts);
-  jar.set("sid",     String(admin.id), opts);
-    const e = String(email || "").trim().toLowerCase()
-    const p = String(password || "");
+    // accept both JSON and form posts
+    const ct = req.headers.get("content-type") || "";
+    let email = "", password = "";
+    if (ct.includes("application/json")) {
+      const j = (await req.json()) ?? {};
+      email = String(j.email || "").trim().toLowerCase();
+      password = String(j.password || "");
+    } else {
+      const fd = await req.formData();
+      email = String(fd.get("email") || "").trim().toLowerCase();
+      password = String(fd.get("password") || "");
+    }
 
-    cookies().set("session", String(admin.id), opts);
-cookies().set("sid", String(admin.id), opts);
-
-    if (!e || !p) {
+    if (!email || !password) {
       return NextResponse.json({ ok: false, error: "Missing fields" }, { status: 400 });
     }
 
-    // Your schema: User with isAdmin/email/adminPasswordHash
-    const user = await db.user.findUnique({
-      where: { email: e },
-      select: { id: true, email: true, isAdmin: true, adminPasswordHash: true, adminPassword: true },
-    });
+    // If your model is Admin or AdminUser, both variants are handled below.
+    const admin =
+      (db as any).admin?.findUnique
+        ? await (db as any).admin.findUnique({ where: { email } })
+        : await (db as any).adminUser.findUnique({ where: { email } });
 
-    if (!user || !user.isAdmin) {
+    if (!admin) {
       return NextResponse.json({ ok: false, error: "Invalid credentials" }, { status: 401 });
     }
 
-    // Prefer the hash; fall back to plain (if present) for legacy data only.
-    let isValid = false;
-    if (user.adminPasswordHash) {
-      isValid = await bcrypt.compare(p, user.adminPasswordHash);
-    } else if (user.adminPassword) {
-      isValid = p === user.adminPassword;
-    }
-
-    if (!isValid) {
+    const ok = await bcrypt.compare(password, admin.passwordHash);
+    if (!ok) {
       return NextResponse.json({ ok: false, error: "Invalid credentials" }, { status: 401 });
     }
 
-    // Set the session cookie on the response
-    const res = NextResponse.json({ ok: true, user: { id: user.id, email: user.email, isAdmin: true } });
+    // ⬇️ only set cookies AFTER admin is known and validated
+    const jar = cookies();
+    const opts = cookieOptsFor(req.headers.get("host") || "");
+    jar.set("session", String(admin.id), opts);
+    jar.set("sid", String(admin.id), opts); // keep for back-compat if you use it elsewhere
 
-    const host = req.headers.get("host");
-    res.cookies.set({
-      name: "sid",
-      value: String(user.id),
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/",
-      domain: cookieDomainForProd(host),
-      maxAge: 60 * 60 * 24 * 30, // 30 days
-    });
-
-    return res;
+    return NextResponse.json({ ok: true });
   } catch (err) {
-    console.error("admin-login error", err);
+    console.error(err);
     return NextResponse.json({ ok: false, error: "Server error" }, { status: 500 });
   }
 }
