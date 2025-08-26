@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import bcrypt from "bcryptjs";
-import { db } from "@src/lib/db"; // keep your existing prisma client import
+import { db } from "@/src/lib/db";// keep your existing prisma client import
 
 // make cookie valid on apex + www in prod
 function cookieOptsFor(host: string) {
