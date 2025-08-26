@@ -116,7 +116,7 @@ function PicksTable() {
         <div className="text-sm text-red-600">
           {data?.error ?? "Could not load picks."}
         </div>
-      ) : (data.rows?.length ?? 0) === 0 ? (
+      ) : !data?.rows || data.rows.length === 0 ? (
         <div className="text-sm text-gray-500">No picks yet.</div>
       ) : (
         <div className="overflow-x-auto rounded-lg border">
