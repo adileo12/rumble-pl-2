@@ -47,6 +47,7 @@ export default function RumblePlayPage() {
     const r = await fetch("/api/rumble/pick", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+       credentials: "include",
       body: JSON.stringify({ clubId: selected }),
     });
     if (r.ok) {
