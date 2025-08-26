@@ -4,7 +4,11 @@ import { cookies } from "next/headers";
 import { db } from "@/src/lib/db";
 import { sessionCookieOptionsForHost } from "@/src/lib/auth";
 
-const COOKIE = "sid";
+const host = req.headers.get("host");
+const opts = sessionCookieOptionsForHost(host);
+
+const jar = cookies();
+jar.set("sid", String(user.id), opts);
 
 function cookieOptions(req: NextRequest) {
   const host = req.headers.get("host") || "";
