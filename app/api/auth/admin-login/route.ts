@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { db } from "@/src/lib/db";
+import { sessionCookieOptionsForHost } from "@/src/lib/auth";
 
 function cookieDomainForProd(host?: string | null) {
   // Use env for consistency (set on Vercel -> .env): .havengames.org
@@ -18,9 +19,12 @@ function cookieDomainForProd(host?: string | null) {
 export async function POST(req: Request) {
   try {
     const { email, password } = await req.json();
-
-    const e = String(email || "").trim().toLowerCase();
+    const opts = sessionCookieOptionsForHost(req.headers.get("host") || "");
+    const e = String(email || "").trim().toLowerCase()
     const p = String(password || "");
+
+    cookies().set("session", String(admin.id), opts);
+cookies().set("sid", String(admin.id), opts);
 
     if (!e || !p) {
       return NextResponse.json({ ok: false, error: "Missing fields" }, { status: 400 });
