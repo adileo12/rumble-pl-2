@@ -6,10 +6,11 @@ export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
   try {
-    const host = req.headers.get("host");
-    const body = await req.json().catch(() => ({} as any));
-    const code = String(body?.code || "").trim();
-
+    const host = req.headers.get("host") || "";
+const opts = sessionCookieOptionsForHost(host);
+const jar = cookies();
+// jar.set("session", <userIdOrToken>, opts);
+// jar.set("sid", <userIdOrToken>, opts);
     if (!code) {
       return NextResponse.json({ ok: false, error: "Missing code" }, { status: 400 });
     }
