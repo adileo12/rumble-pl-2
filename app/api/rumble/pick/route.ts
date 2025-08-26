@@ -1,6 +1,7 @@
 // app/api/rumble/pick/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db"; // If your client is exported as `prisma`, just rename `db` -> `prisma` below.
+import { db as client } from "@/lib/db"; // If you export prisma as `prisma`, rename `db` below.
+const db = client;
 
 function toNum(v: unknown): number | null {
   if (v === null || v === undefined) return null;
@@ -8,84 +9,99 @@ function toNum(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-async function readClubId(req: NextRequest) {
+async function readPayload(req: NextRequest) {
   try {
     const ct = req.headers.get("content-type") || "";
     if (ct.includes("application/json")) {
-      const body = await req.json().catch(() => ({}));
-      return toNum(body?.clubId);
+      const body = await req.json().catch(() => ({} as any));
+      return { clubId: toNum(body?.clubId), gwId: toNum(body?.gwId) };
     }
     const fd = await req.formData();
-    return toNum(fd.get("clubId"));
+    return { clubId: toNum(fd.get("clubId")), gwId: toNum(fd.get("gwId")) };
   } catch {
-    return null;
+    return { clubId: null, gwId: null };
   }
 }
 
-async function resolveSeasonAndNextGw(seasonIdFromClient: number | null) {
-  // 1) season
+async function getActiveSeason() {
+  // Active season first; otherwise most recent season.
   const season =
-    seasonIdFromClient != null
-      ? await db.season.findUnique({ where: { id: seasonIdFromClient } })
-      : await db.season.findFirst({
-          where: { isActive: true },
-          orderBy: { startsAt: "desc" },
-        });
-
-  if (!season) return { season: null, gw: null };
-
-  // 2) next open GW (deadline in the future)
-  const now = new Date();
-  const gw =
-    (await db.gameweek.findFirst({
-      where: { seasonId: season.id, deadline: { gt: now } },
-      orderBy: { deadline: "asc" },
+    (await db.season.findFirst({
+      where: { isActive: true },
+      orderBy: { startsAt: "desc" },
     })) ||
-    // If nothing in the future (end of season), take the latest so the API still behaves
-    (await db.gameweek.findFirst({
-      where: { seasonId: season.id },
-      orderBy: { deadline: "desc" },
+    (await db.season.findFirst({
+      orderBy: { startsAt: "desc" },
     }));
 
-  return { season, gw };
+  return season;
+}
+
+async function nextOpenGwForSeason(seasonId: number) {
+  const now = new Date();
+  const next =
+    (await db.gameweek.findFirst({
+      where: { seasonId, deadline: { gt: now } },
+      orderBy: { deadline: "asc" },
+    })) ||
+    (await db.gameweek.findFirst({
+      where: { seasonId },
+      orderBy: { deadline: "desc" }, // when season is completed
+    }));
+  return next;
 }
 
 export async function POST(req: NextRequest) {
-  // Get the logged-in user id from your cookie/session.
-  // (This matches your current cookie name used elsewhere.)
+  // Auth (same cookie your app uses elsewhere)
   const sid = req.cookies.get("sid")?.value;
-  if (!sid) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  }
+  if (!sid) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
 
   const user = await db.user.findUnique({ where: { id: Number(sid) } });
-  if (!user) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  }
+  if (!user) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
 
-  // Read and validate club
-  const clubId = await readClubId(req);
+  // Payload
+  const { clubId, gwId } = await readPayload(req);
   if (!clubId) {
+    // keep this message minimal so it doesn’t regress older front-ends that parse text
     return NextResponse.json({ ok: false, error: "Missing clubId" }, { status: 400 });
   }
 
-  // Season is server-resolved (client no longer needs to send seasonId)
-  const { season, gw } = await resolveSeasonAndNextGw(null);
-  if (!season || !gw) {
-    return NextResponse.json({ ok: false, error: "No active gameweek" }, { status: 400 });
+  // Determine target gameweek
+  let gameweek = null as null | { id: number; seasonId: number; deadline: Date };
+
+  if (gwId) {
+    const gw = await db.gameweek.findUnique({ where: { id: gwId } });
+    if (!gw) {
+      return NextResponse.json({ ok: false, error: "Invalid gwId" }, { status: 400 });
+    }
+    const now = new Date();
+    if (gw.deadline > now) {
+      gameweek = gw;
+    } else {
+      // shift forward to the next open GW in the same season
+      gameweek = await nextOpenGwForSeason(gw.seasonId);
+    }
+  } else {
+    const season = await getActiveSeason();
+    if (!season) return NextResponse.json({ ok: false, error: "No active season" }, { status: 400 });
+    gameweek = await nextOpenGwForSeason(season.id);
   }
 
-  // “Last pick before deadline wins”: upsert by (userId, gameweekId)
+  if (!gameweek) {
+    return NextResponse.json({ ok: false, error: "No target gameweek" }, { status: 400 });
+  }
+
+  // Upsert: last pick before deadline wins
   await db.pick.upsert({
-    where: { userId_gameweekId: { userId: user.id, gameweekId: gw.id } },
+    where: { userId_gameweekId: { userId: user.id, gameweekId: gameweek.id } },
     update: { clubId },
-    create: { userId: user.id, gameweekId: gw.id, clubId },
+    create: { userId: user.id, gameweekId: gameweek.id, clubId },
   });
 
   return NextResponse.json({
     ok: true,
-    seasonId: season.id,
-    gameweekId: gw.id,
+    gameweekId: gameweek.id,
+    seasonId: gameweek.seasonId,
     clubId,
   });
 }
