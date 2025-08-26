@@ -1,71 +1,87 @@
-// app/api/auth/admin-login/route.ts
-import { NextResponse } from "next/server";
-import bcrypt from "bcryptjs";
-import { db } from "@/src/lib/db";
+// app/api/auth/login/route.ts
+import { NextRequest, NextResponse } from "next/server";
 
-function cookieDomainForProd(host?: string | null) {
-  // Use env for consistency (set on Vercel -> .env): .havengames.org
-  const cfg = process.env.NEXT_PUBLIC_COOKIE_DOMAIN;
-  if (process.env.NODE_ENV !== "production") return undefined;
-  if (cfg && cfg.trim()) return cfg.trim();
-  // fallback: infer from host header (apex or www)
-  if (!host) return undefined;
-  const h = host.toLowerCase();
-  if (h.endsWith(".havengames.org") || h === "havengames.org") return ".havengames.org";
-  return undefined;
+/**
+ * Read "code" from JSON or form-data so either kind of client works.
+ * Accepts keys: code | secret | token (all common variants).
+ */
+async function readSecretCode(req: NextRequest) {
+  let code = "";
+
+  // Try JSON first
+  try {
+    if ((req.headers.get("content-type") || "").includes("application/json")) {
+      const j = await req.json();
+      code = j?.code ?? j?.secret ?? j?.token ?? "";
+    }
+  } catch {
+    /* ignore */
+  }
+
+  // Fallback to form-data / urlencoded
+  if (!code) {
+    try {
+      const fd = await req.formData();
+      code = (fd.get("code") ?? fd.get("secret") ?? fd.get("token") ?? "") as string;
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return String(code || "").trim();
 }
 
-export async function POST(req: Request) {
-  try {
-    const { email, password } = await req.json();
+/**
+ * In prod we validate against an env var.
+ * Use any one of these names, whichever you prefer to set in Vercel:
+ *   SECRET_LOGIN_CODE, LOGIN_CODE, USER_LOGIN_CODE, HAVEN_LOGIN_CODE
+ * In development (no env), any code is accepted to keep you moving.
+ */
+function isValid(code: string) {
+  const envCode =
+    process.env.SECRET_LOGIN_CODE ||
+    process.env.LOGIN_CODE ||
+    process.env.USER_LOGIN_CODE ||
+    process.env.HAVEN_LOGIN_CODE ||
+    "";
 
-    const e = String(email || "").trim().toLowerCase();
-    const p = String(password || "");
-
-    if (!e || !p) {
-      return NextResponse.json({ ok: false, error: "Missing fields" }, { status: 400 });
-    }
-
-    // Your schema: User with isAdmin/email/adminPasswordHash
-    const user = await db.user.findUnique({
-      where: { email: e },
-      select: { id: true, email: true, isAdmin: true, adminPasswordHash: true, adminPassword: true },
-    });
-
-    if (!user || !user.isAdmin) {
-      return NextResponse.json({ ok: false, error: "Invalid credentials" }, { status: 401 });
-    }
-
-    // Prefer the hash; fall back to plain (if present) for legacy data only.
-    let isValid = false;
-    if (user.adminPasswordHash) {
-      isValid = await bcrypt.compare(p, user.adminPasswordHash);
-    } else if (user.adminPassword) {
-      isValid = p === user.adminPassword;
-    }
-
-    if (!isValid) {
-      return NextResponse.json({ ok: false, error: "Invalid credentials" }, { status: 401 });
-    }
-
-    // Set the session cookie on the response
-    const res = NextResponse.json({ ok: true, user: { id: user.id, email: user.email, isAdmin: true } });
-
-    const host = req.headers.get("host");
-    res.cookies.set({
-      name: "sid",
-      value: String(user.id),
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/",
-      domain: cookieDomainForProd(host),
-      maxAge: 60 * 60 * 24 * 30, // 30 days
-    });
-
-    return res;
-  } catch (err) {
-    console.error("admin-login error", err);
-    return NextResponse.json({ ok: false, error: "Server error" }, { status: 500 });
+  if (!envCode) {
+    // No env set -> allow in dev
+    return process.env.NODE_ENV !== "production" && !!code;
   }
+  return code === envCode;
+}
+
+/**
+ * Make cookie options work for both apex + www in production.
+ */
+function cookieOptionsForHost(host: string) {
+  const onProdDomain = /(^|\.)havengames\.org$/i.test(host);
+  return {
+    httpOnly: true,
+    sameSite: "lax" as const,
+    secure: true,
+    path: "/",
+    ...(onProdDomain ? { domain: ".havengames.org" } : {}),
+    maxAge: 60 * 60 * 24 * 30, // 30 days
+  };
+}
+
+export async function POST(req: NextRequest) {
+  const code = await readSecretCode(req);
+  if (!code) {
+    // <-- This used to trigger your "Missing fields" error.
+    return NextResponse.json({ ok: false, error: "Missing fields" }, { status: 400 });
+  }
+
+  if (!isValid(code)) {
+    return NextResponse.json({ ok: false, error: "Invalid code" }, { status: 401 });
+  }
+
+  // If your app only checks for presence of "session" cookie, using the code is fine.
+  // If you later switch to DB-backed sessions, you can drop a token here instead.
+  const res = NextResponse.json({ ok: true });
+  const host = req.headers.get("host") || "";
+  res.cookies.set("session", code, cookieOptionsForHost(host));
+  return res;
 }
