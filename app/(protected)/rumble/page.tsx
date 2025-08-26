@@ -14,7 +14,12 @@ export default function RumblePlayPage() {
   async function load() {
     try {
       setLoading(true);
-      const r = await fetch("/api/rumble/current", { cache: "no-store" });
+      const res = await fetch("/api/rumble/pick", {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  credentials: "include",                 // <- include auth cookie
+  body: JSON.stringify({ clubId: selectedClubId }),
+});
       const j = (await r.json()) as ApiResp;
       setResp(j);
       setErr(null);
