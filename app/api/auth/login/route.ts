@@ -1,74 +1,48 @@
-// app/api/auth/login/route.ts
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { db } from "@/src/lib/db";
 import { sessionCookieOptionsForHost } from "@/src/lib/auth";
 
-const host = req.headers.get("host");
-const opts = sessionCookieOptionsForHost(host);
+export const dynamic = "force-dynamic";
 
-const jar = cookies();
-jar.set("sid", String(user.id), opts);
-
-function cookieOptions(req: NextRequest) {
+export async function POST(req: Request) {
+  // ✅ Anything that needs req or cookies() must be inside the handler
   const host = req.headers.get("host") || "";
-  const isProd = process.env.NODE_ENV === "production";
-  const prodDomain =
-    isProd && (host.endsWith("havengames.org") || host.endsWith("www.havengames.org"))
-      ? ".havengames.org"
-      : undefined;
+  const opts = sessionCookieOptionsForHost(host);
+  const jar = cookies();
 
-  return {
-    httpOnly: true as const,
-    sameSite: "lax" as const,
-    secure: true,
-    path: "/",
-    ...(prodDomain ? { domain: prodDomain } : {}),
-    maxAge: 60 * 60 * 24 * 30, // 30 days
-  };
-}
+  // ---- keep your existing logic below this line ----
+  // If your login expects a secret code, this is a safe way to read it:
+  const body = await req.json().catch(() => ({} as any));
+  const code =
+    String(body?.code ?? body?.secretCode ?? body?.secret_code ?? "").trim();
 
-// Read code from JSON or form-encoded bodies; accept `secretCode` or `code`
-async function readCode(req: NextRequest): Promise<string> {
-  // Try JSON
-  try {
-    const body = await req.json();
-    const sc = String(body?.secretCode ?? body?.code ?? "").trim();
-    if (sc) return sc;
-  } catch {
-    /* continue */
-  }
-  // Try form data
-  try {
-    const form = await req.formData();
-    const sc = String(form.get("secretCode") ?? form.get("code") ?? "").trim();
-    if (sc) return sc;
-  } catch {
-    /* continue */
-  }
-  return "";
-}
-
-export async function POST(req: NextRequest) {
-  const sc = await readCode(req);
-  const opts = sessionCookieOptionsForHost(req.headers.get("host") || "");
-  if (!sc) {
-    return NextResponse.json({ ok: false, error: "Missing secretCode" }, { status: 400 });
+  if (!code) {
+    return NextResponse.json(
+      { ok: false, error: "Missing fields" },
+      { status: 400 }
+    );
   }
 
-  // Look up user by secret code
-  const user = await db.user.findUnique({
-    where: { secretCode: sc },
-    select: { id: true, name: true, isAdmin: true },
-  });
+  // Find the user by whatever model/column you already use.
+  // (Support both possible Prisma model names to match your schema.)
+  const anyDb: any = db;
+  const userClient = anyDb.user ?? anyDb.User;
+
+  const user =
+    (await userClient.findFirst?.({ where: { secretCode: code } })) ??
+    (await userClient.findUnique?.({ where: { secretCode: code } }));
 
   if (!user) {
-    return NextResponse.json({ ok: false, error: "Invalid code" }, { status: 401 });
+    return NextResponse.json(
+      { ok: false, error: "Invalid code" },
+      { status: 401 }
+    );
   }
 
-  // Set session cookie
- cookies().set("session", String(user.id), opts);
-cookies().set("sid", String(user.id), opts);
+  // Set the cookies your app reads (both names are kept to avoid regressions)
+  jar.set("session", String(user.id), opts);
+  jar.set("sid", String(user.id), opts);
 
-  return NextResponse.json({ ok: true, user });
+  return NextResponse.json({ ok: true });
 }
