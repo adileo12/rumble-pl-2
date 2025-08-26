@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { db } from "@/src/lib/db";
+import { sessionCookieOptionsForHost } from "@/src/lib/auth";
 
 const COOKIE = "sid";
 
@@ -46,6 +47,7 @@ async function readCode(req: NextRequest): Promise<string> {
 
 export async function POST(req: NextRequest) {
   const sc = await readCode(req);
+  const opts = sessionCookieOptionsForHost(req.headers.get("host") || "");
   if (!sc) {
     return NextResponse.json({ ok: false, error: "Missing secretCode" }, { status: 400 });
   }
@@ -61,7 +63,8 @@ export async function POST(req: NextRequest) {
   }
 
   // Set session cookie
-  cookies().set(COOKIE, String(user.id), cookieOptions(req));
+ cookies().set("session", String(user.id), opts);
+cookies().set("sid", String(user.id), opts);
 
   return NextResponse.json({ ok: true, user });
 }
