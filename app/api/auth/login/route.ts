@@ -1,108 +1,56 @@
+// app/api/auth/admin-login/route.ts
 import { NextResponse } from "next/server";
+import bcrypt from "bcryptjs";
 import { db } from "@/src/lib/db";
 
-/** Return a cookie domain that works on apex+www in prod; undefined elsewhere */
 function cookieDomainForProd(host?: string | null) {
+  // Use env for consistency (set on Vercel -> .env): .havengames.org
+  const cfg = process.env.NEXT_PUBLIC_COOKIE_DOMAIN;
   if (process.env.NODE_ENV !== "production") return undefined;
-  const forced = process.env.NEXT_PUBLIC_COOKIE_DOMAIN?.trim();
-  if (forced) return forced; // e.g. ".havengames.org"
+  if (cfg && cfg.trim()) return cfg.trim();
+  // fallback: infer from host header (apex or www)
   if (!host) return undefined;
   const h = host.toLowerCase();
-  if (h === "havengames.org" || h.endsWith(".havengames.org")) return ".havengames.org";
+  if (h.endsWith(".havengames.org") || h === "havengames.org") return ".havengames.org";
   return undefined;
-}
-
-/** Safely take the first non-empty string */
-function firstNonEmpty(...vals: (unknown)[]) {
-  for (const v of vals) {
-    const s = typeof v === "string" ? v.trim() : "";
-    if (s) return s;
-  }
-  return "";
-}
-
-/** Read body in a very forgiving way (FormData, JSON, then query params) */
-async function readLoosePayload(req: Request) {
-  const ct = req.headers.get("content-type") || "";
-
-  // 1) Try FormData first (works for urlencoded & multipart)
-  try {
-    const fd = await req.clone().formData();
-    const entries = Object.fromEntries([...fd.entries()].map(([k, v]) => [k, String(v)]));
-    if (Object.keys(entries).length > 0) {
-      return { ct, payload: entries };
-    }
-  } catch { /* ignore */ }
-
-  // 2) Try JSON
-  try {
-    const json = (await req.clone().json()) as Record<string, unknown>;
-    if (json && Object.keys(json).length > 0) {
-      return { ct, payload: json };
-    }
-  } catch { /* ignore */ }
-
-  // 3) Fallback to query params
-  const url = new URL(req.url);
-  const qp: Record<string, string> = {};
-  url.searchParams.forEach((v, k) => (qp[k] = v));
-  return { ct, payload: qp };
-}
-
-function pickCodeAndSecret(raw: Record<string, unknown>) {
-  // Normalize keys to case-insensitive lookups
-  const lower: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(raw)) lower[k.toLowerCase()] = v;
-
-  const code = firstNonEmpty(
-    lower.code,
-    lower.joincode,
-    lower["join_code"]
-  );
-
-  const secret = firstNonEmpty(
-    lower.secret,
-    lower.secretcode,
-    lower["secret_code"]
-  );
-
-  return { code, secret };
 }
 
 export async function POST(req: Request) {
   try {
-    const { ct, payload } = await readLoosePayload(req);
-    const { code, secret } = pickCodeAndSecret(payload);
+    const { email, password } = await req.json();
 
-    if (!code || !secret) {
-      // Helpful diagnostics in dev so you can see what the client sent
-      const devMeta =
-        process.env.NODE_ENV !== "production"
-          ? { contentType: ct, keys: Object.keys(payload || {}) }
-          : undefined;
+    const e = String(email || "").trim().toLowerCase();
+    const p = String(password || "");
 
-      return NextResponse.json(
-        { ok: false, error: "Missing fields", meta: devMeta },
-        { status: 400 }
-      );
+    if (!e || !p) {
+      return NextResponse.json({ ok: false, error: "Missing fields" }, { status: 400 });
     }
 
-    // Adjust this query to your actual fields. From your earlier schema, users have joinCode + secretCode
-    const user = await db.user.findFirst({
-      where: { joinCode: code, secretCode: secret },
-      select: { id: true, name: true, email: true, isAdmin: true },
+    // Your schema: User with isAdmin/email/adminPasswordHash
+    const user = await db.user.findUnique({
+      where: { email: e },
+      select: { id: true, email: true, isAdmin: true, adminPasswordHash: true, adminPassword: true },
     });
 
-    if (!user) {
-      return NextResponse.json(
-        { ok: false, error: "Invalid code or secret" },
-        { status: 401 }
-      );
+    if (!user || !user.isAdmin) {
+      return NextResponse.json({ ok: false, error: "Invalid credentials" }, { status: 401 });
     }
 
-    const res = NextResponse.json({ ok: true, user });
+    // Prefer the hash; fall back to plain (if present) for legacy data only.
+    let isValid = false;
+    if (user.adminPasswordHash) {
+      isValid = await bcrypt.compare(p, user.adminPasswordHash);
+    } else if (user.adminPassword) {
+      isValid = p === user.adminPassword;
+    }
 
-    // Cookie valid on apex + www in prod
+    if (!isValid) {
+      return NextResponse.json({ ok: false, error: "Invalid credentials" }, { status: 401 });
+    }
+
+    // Set the session cookie on the response
+    const res = NextResponse.json({ ok: true, user: { id: user.id, email: user.email, isAdmin: true } });
+
     const host = req.headers.get("host");
     res.cookies.set({
       name: "sid",
@@ -117,7 +65,7 @@ export async function POST(req: Request) {
 
     return res;
   } catch (err) {
-    console.error("login error", err);
+    console.error("admin-login error", err);
     return NextResponse.json({ ok: false, error: "Server error" }, { status: 500 });
   }
 }
