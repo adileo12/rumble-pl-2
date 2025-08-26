@@ -1,86 +1,64 @@
 "use client";
 
-import { useState, Suspense } from "react";
-import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 
-function Inner() {
-  const [secretCode, setSecret] = useState("");
-  const [loading, setLoading] = useState(false);
+export default function LoginInner() {
+  const [code, setCode] = useState("");
   const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const router = useRouter();
-  const sp = useSearchParams();
-  const next = sp.get("next") || "/rumble";
 
-  async function submit(e: React.FormEvent) {
+  async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErr(null);
-    setLoading(true);
+    setBusy(true);
+
     try {
-      const res = await fetch("/api/auth/login", {
+      const r = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ secretCode }),
+        body: JSON.stringify({ code: code.trim() }), // << key MUST be "code"
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data?.ok) throw new Error(data?.error || "Login failed");
-      // hard nav to ensure cookies are seen immediately
-      window.location.assign(next);
-    } catch (e: any) {
-      setErr(e.message || "Login failed");
-    } finally {
-      setLoading(false);
+
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok || !data?.ok) {
+        setErr(data?.error || "Login failed");
+        setBusy(false);
+        return;
+      }
+
+      // Go wherever you land users after login
+      router.replace("/home"); // change to /dashboard if that's your home
+    } catch (e) {
+      setErr("Network error");
+      setBusy(false);
     }
   }
 
   return (
-    <div className="mx-auto flex min-h-[70vh] w-full max-w-5xl items-start sm:items-center justify-center px-6">
-      <div className="w-full max-w-sm">
-        <form onSubmit={submit} className="space-y-4 text-center">
-          <label className="block text-base sm:text-lg font-medium">
-            Secret code
-          </label>
-          <input
-            className="mx-auto block w-full rounded-md border px-4 py-3 text-lg outline-none focus:ring-2 focus:ring-slate-800"
-            value={secretCode}
-            onChange={(e) => setSecret(e.target.value)}
-            autoComplete="off"
-            required
-          />
+    <form onSubmit={onSubmit} className="space-y-4 max-w-sm mx-auto mt-16">
+      <label className="block text-sm text-slate-300">
+        Secret code
+        <input
+          type="text"
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+          placeholder="Enter secret code"
+          className="mt-1 w-full px-3 py-2 rounded-md bg-slate-900 border border-slate-700 text-slate-100"
+          required
+        />
+      </label>
 
-          {err && <p className="text-red-600 text-sm">{err}</p>}
+      {err && <p className="text-rose-400 text-sm">{err}</p>}
 
-          <button
-            disabled={loading}
-            className="mx-auto block rounded-md bg-slate-900 text-white px-6 py-3 text-base sm:text-lg disabled:opacity-60"
-          >
-            {loading ? "Signing in…" : "Sign in"}
-          </button>
-
-          <p className="text-xs text-slate-600">
-            New here?{" "}
-            <Link href="/signup" className="underline">
-              Create your secret code
-            </Link>
-          </p>
-        </form>
-      </div>
-
-      {/* Admin link bottom-right */}
-      <Link
-        href="/admin-login"
-        className="fixed bottom-4 right-4 text-xs text-slate-600 underline"
+      <button
+        type="submit"
+        disabled={busy}
+        className="w-full py-2 rounded-md bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white"
       >
-        Admin login
-      </Link>
-    </div>
-  );
-}
-
-export default function LoginInner() {
-  return (
-    <Suspense fallback={<div className="p-6 text-center">Loading…</div>}>
-      <Inner />
-    </Suspense>
+        {busy ? "Signing in..." : "Sign in"}
+      </button>
+    </form>
   );
 }
