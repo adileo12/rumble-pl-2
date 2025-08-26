@@ -73,16 +73,20 @@ export default function LoginInner() {
         )}
 
         {/* New user / generate code link (INSIDE the component) */}
-        <div className="mt-4 text-sm text-slate-600">
-          New here?{" "}
-          <Link
-            href="/signup"
-            className="font-medium text-indigo-600 hover:text-indigo-500"
-          >
-            Generate a secret code
-          </Link>
-        </div>
-      </form>
-    </div>
-  );
-}
+       <div className="mt-3">
+  <a
+    href="/signup"
+    className="inline-flex items-center gap-1 text-sm font-medium text-indigo-600 hover:text-indigo-700 underline underline-offset-4"
+  >
+    Need a code? Generate a secret code →
+  </a>
+</div>
+
+<div className="mt-8 text-right">
+  <a
+    href="/admin-login"
+    className="text-xs text-gray-500 hover:text-gray-700 underline underline-offset-4"
+  >
+    Admin Login
+  </a>
+</div>
