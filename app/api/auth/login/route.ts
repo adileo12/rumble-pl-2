@@ -1,27 +1,19 @@
-// app/api/auth/login/route.ts
 import { NextResponse } from "next/server";
 import { db } from "@/src/lib/db";
 
+/** Return a cookie domain that works on apex+www in prod; undefined elsewhere */
 function cookieDomainForProd(host?: string | null) {
-  const cfg = process.env.NEXT_PUBLIC_COOKIE_DOMAIN;
   if (process.env.NODE_ENV !== "production") return undefined;
-  if (cfg && cfg.trim()) return cfg.trim();
+  const forced = process.env.NEXT_PUBLIC_COOKIE_DOMAIN?.trim();
+  if (forced) return forced; // e.g. ".havengames.org"
   if (!host) return undefined;
   const h = host.toLowerCase();
-  if (h.endsWith(".havengames.org") || h === "havengames.org") return ".havengames.org";
+  if (h === "havengames.org" || h.endsWith(".havengames.org")) return ".havengames.org";
   return undefined;
 }
 
-type LooseLoginBody = Partial<{
-  code: string;
-  joinCode: string;
-  join_code: string;
-  secret: string;
-  secretCode: string;
-  secret_code: string;
-}>;
-
-function pickFirst(...vals: (string | null | undefined)[]) {
+/** Safely take the first non-empty string */
+function firstNonEmpty(...vals: (unknown)[]) {
   for (const v of vals) {
     const s = typeof v === "string" ? v.trim() : "";
     if (s) return s;
@@ -29,66 +21,88 @@ function pickFirst(...vals: (string | null | undefined)[]) {
   return "";
 }
 
+/** Read body in a very forgiving way (FormData, JSON, then query params) */
+async function readLoosePayload(req: Request) {
+  const ct = req.headers.get("content-type") || "";
+
+  // 1) Try FormData first (works for urlencoded & multipart)
+  try {
+    const fd = await req.clone().formData();
+    const entries = Object.fromEntries([...fd.entries()].map(([k, v]) => [k, String(v)]));
+    if (Object.keys(entries).length > 0) {
+      return { ct, payload: entries };
+    }
+  } catch { /* ignore */ }
+
+  // 2) Try JSON
+  try {
+    const json = (await req.clone().json()) as Record<string, unknown>;
+    if (json && Object.keys(json).length > 0) {
+      return { ct, payload: json };
+    }
+  } catch { /* ignore */ }
+
+  // 3) Fallback to query params
+  const url = new URL(req.url);
+  const qp: Record<string, string> = {};
+  url.searchParams.forEach((v, k) => (qp[k] = v));
+  return { ct, payload: qp };
+}
+
+function pickCodeAndSecret(raw: Record<string, unknown>) {
+  // Normalize keys to case-insensitive lookups
+  const lower: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(raw)) lower[k.toLowerCase()] = v;
+
+  const code = firstNonEmpty(
+    lower.code,
+    lower.joincode,
+    lower["join_code"]
+  );
+
+  const secret = firstNonEmpty(
+    lower.secret,
+    lower.secretcode,
+    lower["secret_code"]
+  );
+
+  return { code, secret };
+}
+
 export async function POST(req: Request) {
   try {
-    let body: LooseLoginBody = {};
-    const ct = req.headers.get("content-type") || "";
-
-    // Accept JSON
-    if (ct.includes("application/json")) {
-      try {
-        body = (await req.json()) ?? {};
-      } catch {
-        body = {};
-      }
-    }
-    // Accept form posts (default <form method="POST">)
-    else if (
-      ct.includes("application/x-www-form-urlencoded") ||
-      ct.includes("multipart/form-data")
-    ) {
-      const form = await req.formData();
-      body = {
-        code: (form.get("code") as string) ?? undefined,
-        joinCode: (form.get("joinCode") as string) ?? undefined,
-        join_code: (form.get("join_code") as string) ?? undefined,
-        secret: (form.get("secret") as string) ?? undefined,
-        secretCode: (form.get("secretCode") as string) ?? undefined,
-        secret_code: (form.get("secret_code") as string) ?? undefined,
-      };
-    }
-    // As a last resort, accept query params (handy for quick tests)
-    else {
-      const url = new URL(req.url);
-      body = {
-        code: url.searchParams.get("code") ?? undefined,
-        joinCode: url.searchParams.get("joinCode") ?? undefined,
-        join_code: url.searchParams.get("join_code") ?? undefined,
-        secret: url.searchParams.get("secret") ?? undefined,
-        secretCode: url.searchParams.get("secretCode") ?? undefined,
-        secret_code: url.searchParams.get("secret_code") ?? undefined,
-      };
-    }
-
-    const code = pickFirst(body.code, body.joinCode, body.join_code);
-    const secret = pickFirst(body.secret, body.secretCode, body.secret_code);
+    const { ct, payload } = await readLoosePayload(req);
+    const { code, secret } = pickCodeAndSecret(payload);
 
     if (!code || !secret) {
-      return NextResponse.json({ ok: false, error: "Missing fields" }, { status: 400 });
+      // Helpful diagnostics in dev so you can see what the client sent
+      const devMeta =
+        process.env.NODE_ENV !== "production"
+          ? { contentType: ct, keys: Object.keys(payload || {}) }
+          : undefined;
+
+      return NextResponse.json(
+        { ok: false, error: "Missing fields", meta: devMeta },
+        { status: 400 }
+      );
     }
 
-    // Your schema: User has joinCode + secretCode
+    // Adjust this query to your actual fields. From your earlier schema, users have joinCode + secretCode
     const user = await db.user.findFirst({
       where: { joinCode: code, secretCode: secret },
       select: { id: true, name: true, email: true, isAdmin: true },
     });
 
     if (!user) {
-      return NextResponse.json({ ok: false, error: "Invalid code or secret" }, { status: 401 });
+      return NextResponse.json(
+        { ok: false, error: "Invalid code or secret" },
+        { status: 401 }
+      );
     }
 
     const res = NextResponse.json({ ok: true, user });
 
+    // Cookie valid on apex + www in prod
     const host = req.headers.get("host");
     res.cookies.set({
       name: "sid",
