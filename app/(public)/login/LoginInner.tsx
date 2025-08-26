@@ -1,20 +1,21 @@
+// app/(public)/login/LoginInner.tsx
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 
 export default function LoginInner() {
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setErr(null);
+    setError(null);
 
-    const trimmed = code.trim();
-    if (!trimmed) {
-      setErr("Please enter your secret code.");
+    const c = code.trim();
+    if (!c) {
+      setError("Enter your secret code.");
       return;
     }
 
@@ -23,20 +24,19 @@ export default function LoginInner() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ code: trimmed }),
+        credentials: "include", // ensure auth cookie is set
+        body: JSON.stringify({ code: c }),
       });
-
-      const data = await res.json();
-      if (!res.ok || !data?.ok) {
-        setErr(data?.error || "Invalid code");
-        setLoading(false);
-        return;
+      const j = await res.json();
+      if (!j.ok) {
+        setError(j.error || "Login failed.");
+      } else {
+        // send them to the protected area after login
+        window.location.href = "/rumble";
       }
-
-      // success -> go home
-      window.location.href = "/home";
     } catch {
-      setErr("Something went wrong. Please try again.");
+      setError("Network error. Please try again.");
+    } finally {
       setLoading(false);
     }
   }
@@ -47,46 +47,48 @@ export default function LoginInner() {
         onSubmit={onSubmit}
         className="rounded-2xl bg-white/70 backdrop-blur border border-slate-200/70 shadow p-6 sm:p-8"
       >
-        <label className="block text-slate-700 font-medium mb-2">
+        <h1 className="text-2xl font-semibold mb-4">Sign in</h1>
+
+        <label className="block text-sm font-medium text-slate-700">
           Secret code
         </label>
-
         <input
           value={code}
           onChange={(e) => setCode(e.target.value)}
-          placeholder="Enter secret code"
-          className="w-full rounded-md bg-slate-900 text-white placeholder:text-slate-400 px-3 py-2 outline-none"
+          placeholder="Enter your secret code"
+          className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500"
         />
+
+        {error && <p className="mt-2 text-sm text-rose-600">{error}</p>}
 
         <button
           type="submit"
           disabled={loading}
-          className="mt-5 w-full rounded-md bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 text-white font-semibold py-2.5 transition"
+          className="mt-4 inline-flex items-center rounded-md bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-700 disabled:opacity-50"
         >
           {loading ? "Signing in…" : "Sign in"}
         </button>
 
-        {err && (
-          <p className="mt-3 text-sm text-rose-600" role="alert">
-            {err}
-          </p>
-        )}
+        {/* generate secret code link */}
+        <div className="mt-3">
+          <Link
+            href="/signup"
+            className="inline-flex items-center gap-1 text-sm font-medium text-indigo-600 hover:text-indigo-700 underline underline-offset-4"
+          >
+            Need a code? Generate a secret code →
+          </Link>
+        </div>
+      </form>
 
-        {/* New user / generate code link (INSIDE the component) */}
-       <div className="mt-3">
-  <a
-    href="/signup"
-    className="inline-flex items-center gap-1 text-sm font-medium text-indigo-600 hover:text-indigo-700 underline underline-offset-4"
-  >
-    Need a code? Generate a secret code →
-  </a>
-</div>
-
-<div className="mt-8 text-right">
-  <a
-    href="/admin-login"
-    className="text-xs text-gray-500 hover:text-gray-700 underline underline-offset-4"
-  >
-    Admin Login
-  </a>
-</div>
+      {/* admin login link */}
+      <div className="mt-6 text-right">
+        <Link
+          href="/admin-login"
+          className="text-xs text-gray-500 hover:text-gray-700 underline underline-offset-4"
+        >
+          Admin Login
+        </Link>
+      </div>
+    </div>
+  );
+}
