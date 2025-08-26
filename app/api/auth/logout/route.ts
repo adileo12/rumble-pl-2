@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
-import { clearSessionCookies } from "@/src/lib/auth";
 
-export const dynamic = "force-dynamic";
-
-export async function POST(req: Request) {
-  const host = req.headers.get("host");
-  clearSessionCookies(host);
-  return NextResponse.json({ ok: true });
+export async function POST() {
+  const res = NextResponse.json({ ok: true });
+  // clear both legacy and current cookies if present
+  res.cookies.set("sid", "", { path: "/", maxAge: 0, httpOnly: true, sameSite: "lax", secure: true });
+  res.cookies.set("session", "", { path: "/", maxAge: 0, httpOnly: true, sameSite: "lax", secure: true });
+  return res;
 }
