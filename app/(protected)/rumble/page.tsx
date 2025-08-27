@@ -45,14 +45,14 @@ export default function RumblePlayPage() {
   async function handleSubmit() {
     if (!selected) return;
     const seasonId = resp?.data?.season?.id;
-    if (!seasonId) {
-      alert("No active season found");
-      return;
-    }
+   if (!seasonId || !selected) {
+  alert("Missing season or club selection");
+  return;
+}
     const r = await fetch("/api/rumble/pick", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ clubId: selected }),
+      body: JSON.stringify({ seasonId, clubId: selected }),
     });
     if (r.ok) {
       setSelected(null);
