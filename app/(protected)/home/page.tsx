@@ -53,7 +53,7 @@ async function fetchNextGw(): Promise<NextGw | null> {
   try {
     const gw = await client.findFirst({
       where: { deadline: { gt: now } },
-      orderBy: { deadline: "asc" },
+      orderBy: { gwNumber: "desc" },
       select: { seasonId: true, number: true, deadline: true },
     });
     return gw ? { seasonId: gw.seasonId, gwNumber: gw.number, deadline: gw.deadline } : null;
