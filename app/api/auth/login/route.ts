@@ -23,7 +23,7 @@ export async function POST(req: Request) {
     cookies().set("sid", user.id, {
       httpOnly: true,
       sameSite: "lax",
-      secure: true,        // keep true on Vercel (HTTPS); use false only for local http
+      secure: process.env.NODE_ENV === "production",        // keep true on Vercel (HTTPS); use false only for local http
       path: "/",
       maxAge: 60 * 60 * 24 * 30,
     });
