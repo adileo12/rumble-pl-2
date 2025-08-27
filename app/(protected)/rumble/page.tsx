@@ -44,6 +44,11 @@ export default function RumblePlayPage() {
 
   async function handleSubmit() {
     if (!selected) return;
+    const seasonId = resp?.data?.season?.id;
+    if (!seasonId) {
+      alert("No active season found");
+      return;
+    }
     const r = await fetch("/api/rumble/pick", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
