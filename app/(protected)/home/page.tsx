@@ -1,4 +1,4 @@
-  import React from "react";
+import React from "react";
 import Link from "next/link";
 import { headers, cookies } from "next/headers";
 import { db } from "@/src/lib/db";
@@ -56,7 +56,7 @@ async function fetchNextGw(): Promise<NextGw | null> {
       orderBy: { deadline: "asc" },
       select: { seasonId: true, number: true, deadline: true },
     });
-    return gw ?? null;
+    return gw ? { seasonId: gw.seasonId, gwNumber: gw.number, deadline: gw.deadline } : null;
   } catch {
     return null;
   }
@@ -182,7 +182,7 @@ export default async function Home() {
           {nextGw ? (
             <>
               <div className="text-lg">
-                {nextGw.seasonId} — GW {nextGw.gwNumber}
+                GW {nextGw.gwNumber}
               </div>
               <div className="text-slate-600">{fmtDate(nextGw.deadline)}</div>
               <div className="mt-4">
@@ -207,7 +207,7 @@ export default async function Home() {
           {latest ? (
             <>
               <div className="text-lg">
-                {latest.seasonId} — GW {latest.gwNumber}
+                GW {latest.gwNumber}
               </div>
               <div className="text-slate-600">Updated {relTo(latest.updatedAt)}</div>
               <div className="mt-4 flex gap-3">
