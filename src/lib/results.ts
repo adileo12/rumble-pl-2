@@ -103,10 +103,18 @@ export async function resolveGameweek(seasonId: string, gwId: string) {
         // For now: set alive=false.
         const user = await tx.user.findUnique({ where: { id: p.userId }, select: { alive: true } });
         if (user?.alive) {
-          await tx.user.update({
-            where: { id: p.userId },
-            data: { alive: false },
-          });
+          // 1) Flip the gameplay flag
+    await tx.user.update({
+      where: { id: p.userId },
+      data: { alive: false },
+    });
+
+    // 2) Record WHEN they were eliminated (enables reports + Lazarus window)
+    await tx.rumbleState.upsert({
+      where: { userId_seasonId: { userId: p.userId, seasonId } },
+      update: { eliminatedAtGw: gwNum, eliminatedAt: new Date() },
+      create: { userId: p.userId, seasonId, eliminatedAtGw: gwNum, eliminatedAt: new Date() },
+    });
         }
         eliminated++;
       } else {
