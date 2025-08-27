@@ -93,7 +93,7 @@ export async function POST(req: Request) {
       const used = await countProxiesUsed(seasonId, u.id);
       if (used < 2) {
         // assign proxy
-        const proxyClub = await pickProxyClubForUser(seasonId, u.id);
+        const proxyClub = await pickProxyClubForUser(seasonId, u.id,gw.id);
         if (proxyClub) {
           await pickClient.create({
             data: {
