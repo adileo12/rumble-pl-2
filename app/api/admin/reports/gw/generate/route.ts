@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { generateGwReportCore } from "@/src/lib/reports-core";
 
@@ -12,6 +13,10 @@ export const dynamic = "force-dynamic";
 export const revalidate = false;
 
 export async function POST(req: Request) {
+  const sid = (await cookies()).get("sid")?.value;
+  const viewer = sid ? await db.user.findUnique({ where: { id: sid }, select: { isAdmin: true } }) : null;
+  if (!viewer?.isAdmin) return NextResponse.json({ ok: false, error: "Forbidden" }, { status: 403 });
+
   try {
     assertCronAuth(req);
     const { seasonId, gwNumber } = await req.json();
