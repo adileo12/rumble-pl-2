@@ -68,7 +68,7 @@ async function fetchLatestReport(): Promise<LatestReport | null> {
   if (!client?.findFirst) return null;
   try {
     const rep = await client.findFirst({
-      orderBy: { updatedAt: "desc" },
+      orderBy: { gwNumber: "desc" },
       select: { seasonId: true, gwNumber: true, updatedAt: true },
     });
     return rep ?? null;
