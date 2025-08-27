@@ -1,4 +1,4 @@
-// src/lib/results.ts
+
 import { db } from "@/src/lib/db";
 
 type Outcome = "WIN" | "DRAW" | "LOSS" | "PENDING";
@@ -49,6 +49,9 @@ function outcomeForPick(fx: any, pickClubId: string): Outcome {
 export async function resolveGameweek(seasonId: string, gwId: string) {
   // Load all fixtures for the GW (so we can match pick.clubId to the single match)
   const fixtures = await db.fixture.findMany({
+     const gw = await db.gameweek.findUnique({ where: { id: gwId }, select: { number: true } });
+  if (!gw) throw new Error("Invalid gwId");
+  const gwNum = gw.number;
     where: { gwId },
     select: {
       id: true,
