@@ -1,4 +1,4 @@
-import React from "react";
+  import React from "react";
 import Link from "next/link";
 import { headers, cookies } from "next/headers";
 import { db } from "@/src/lib/db";
@@ -54,7 +54,7 @@ async function fetchNextGw(): Promise<NextGw | null> {
     const gw = await client.findFirst({
       where: { deadline: { gt: now } },
       orderBy: { deadline: "asc" },
-      select: { seasonId: true, gwNumber: true, deadline: true },
+      select: { seasonId: true, number: true, deadline: true },
     });
     return gw ?? null;
   } catch {
