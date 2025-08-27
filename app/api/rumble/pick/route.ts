@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies, headers } from "next/headers";
 import { db } from "@/src/lib/db";
+export const runtime = "nodejs";
 
 type Body = {
   seasonId: string;
