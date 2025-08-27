@@ -47,11 +47,12 @@ function outcomeForPick(fx: any, pickClubId: string): Outcome {
  * Returns a summary of changes.
  */
 export async function resolveGameweek(seasonId: string, gwId: string) {
-  // Load all fixtures for the GW (so we can match pick.clubId to the single match)
-  const fixtures = await db.fixture.findMany({
-     const gw = await db.gameweek.findUnique({ where: { id: gwId }, select: { number: true } });
+   const gw = await db.gameweek.findUnique({ where: { id: gwId }, select: { number: true } });
   if (!gw) throw new Error("Invalid gwId");
   const gwNum = gw.number;
+  // Load all fixtures for the GW (so we can match pick.clubId to the single match)
+  const fixtures = await db.fixture.findMany({
+    
     where: { gwId },
     select: {
       id: true,
