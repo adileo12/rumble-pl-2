@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 type Body = {
-  seasonId?: string;     // optional — we’ll infer active if missing
+  seasonId?: string; // optional — we’ll infer active if missing
   clubId: string;
 };
 
@@ -29,7 +29,7 @@ async function getViewerId(): Promise<string | null> {
 async function getActiveOrNextGwForSubmission(seasonId: string) {
   const now = new Date();
 
-  // Choose the soonest future deadline; else fall back to latest past gw (if you want).
+  // Choose the soonest future deadline; else fall back to latest by number.
   const upcoming = await db.gameweek.findFirst({
     where: { seasonId, deadline: { gt: now } },
     orderBy: { deadline: "asc" },
@@ -38,7 +38,6 @@ async function getActiveOrNextGwForSubmission(seasonId: string) {
 
   if (upcoming) return upcoming;
 
-  // Optional: fall back to the latest gw by number if nothing is upcoming
   const latest = await db.gameweek.findFirst({
     where: { seasonId },
     orderBy: { number: "desc" },
@@ -106,43 +105,31 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: "CLUB_ALREADY_USED" }, { status: 409 });
     }
 
-    // Upsert by compound unique (userId, seasonId, gwId) — matches your schema
-    const pick = await 
-    // Ensure the selected club plays in this GW (server-side enforcement)
-    const clubFixture = await db.fixture.findFirst({
-  where: { gwId: gw.id, OR: [{ homeClubId: clubId }, { awayClubId: clubId }] },
-  select: { id: true },
-});
-if (!clubFixture) {
-  return NextResponse.json(
-    { ok: false, error: "Selected club does not have a fixture in this gameweek" },
-    { status: 400 }
-  );
-}
-
-const pick = await db.pick.upsert({
-  where: { userId_seasonId_gwId: { userId, seasonId, gwId: gw.id } },
-  create: {
-    userId,
-    seasonId,
-    gwId: gw.id,
-    clubId,
-    source: "USER",
-  },
-  update: {
-    clubId,
-    source: "USER",
-  },
-});
-      create: {
-        userId: viewerId,
-        seasonId: season.id,
-        gwId: gw.id,
-        clubId,
-        // source: defaults to "USER" in schema; omit or set explicitly if desired
-      },
-      include: { club: true },
+    // Create or update the user's pick for this GW (no composite unique required)
+    const existing = await db.pick.findFirst({
+      where: { userId: viewerId, seasonId: season.id, gwId: gw.id },
+      select: { id: true },
     });
+
+    let pick;
+    if (existing) {
+      pick = await db.pick.update({
+        where: { id: existing.id },
+        data: { clubId, source: "USER" },
+        include: { club: true },
+      });
+    } else {
+      pick = await db.pick.create({
+        data: {
+          userId: viewerId,
+          seasonId: season.id,
+          gwId: gw.id,
+          clubId,
+          source: "USER", // explicit for clarity (schema default is "USER")
+        },
+        include: { club: true },
+      });
+    }
 
     return NextResponse.json({ ok: true, pick });
   } catch (err: any) {
