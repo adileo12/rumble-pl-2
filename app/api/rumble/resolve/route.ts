@@ -1,4 +1,5 @@
-// app/api/rumble/resolve/route.ts
+// app/api/rumble/resolve/route.ts\
+import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { getActiveSeason } from "@/src/lib/game";
 import { resolveGameweek } from "@/src/lib/results";
