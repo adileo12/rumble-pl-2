@@ -110,21 +110,30 @@ export async function POST(req: Request) {
     const pick = await 
     // Ensure the selected club plays in this GW (server-side enforcement)
     const clubFixture = await db.fixture.findFirst({
-      where: { gwId: gw.id, OR: [{ homeClubId: clubId }, { awayClubId: clubId }] },
-      select: { id: true },
-    });
-    if (!clubFixture) {
-      return NextResponse.json({ ok: false, error: "Selected club does not have a fixture in this gameweek" }, { status: 400 });
-    }
-db.pick.upsert({
-      where: {
-        userId_seasonId_gwId: {
-          userId: viewerId,
-          seasonId: season.id,
-          gwId: gw.id,
-        },
-      },
-      update: { clubId },
+  where: { gwId: gw.id, OR: [{ homeClubId: clubId }, { awayClubId: clubId }] },
+  select: { id: true },
+});
+if (!clubFixture) {
+  return NextResponse.json(
+    { ok: false, error: "Selected club does not have a fixture in this gameweek" },
+    { status: 400 }
+  );
+}
+
+const pick = await db.pick.upsert({
+  where: { userId_seasonId_gwId: { userId, seasonId, gwId: gw.id } },
+  create: {
+    userId,
+    seasonId,
+    gwId: gw.id,
+    clubId,
+    source: "USER",
+  },
+  update: {
+    clubId,
+    source: "USER",
+  },
+});
       create: {
         userId: viewerId,
         seasonId: season.id,
