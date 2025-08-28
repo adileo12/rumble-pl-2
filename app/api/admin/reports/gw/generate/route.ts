@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { generateGwReportCore } from "@/src/lib/reports-core";
+import { db } from "@/src/lib/db";
 
 function assertCronAuth(req: Request) {
   const expected = process.env.CRON_SECRET;
