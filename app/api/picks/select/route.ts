@@ -44,17 +44,16 @@ export async function POST(req: Request) {
     if (used.has(clubId)) {
       return NextResponse.json({ ok: false, error: "CLUB_ALREADY_USED" }, { status: 409 });
     }
+// Ensure the selected club plays in this GW (server-side enforcement)
+const clubFixture = await db.fixture.findFirst({
+  where: { gwId: gw.id, OR: [{ homeClubId: clubId }, { awayClubId: clubId }] },
+  select: { id: true },
+});
+if (!clubFixture) {
+  return NextResponse.json({ ok: false, error: "Selected club does not have a fixture in this gameweek" }, { status: 400 });
+}
 
-    const pick = await 
-    // Ensure the selected club plays in this GW (server-side enforcement)
-    const clubFixture = await db.fixture.findFirst({
-      where: { gwId: gw.id, OR: [{ homeClubId: clubId }, { awayClubId: clubId }] },
-      select: { id: true },
-    });
-    if (!clubFixture) {
-      return NextResponse.json({ ok: false, error: "Selected club does not have a fixture in this gameweek" }, { status: 400 });
-    }
-db.pick.upsert({
+    const pick = await db.pick.upsert({
       where: {
         // requires @@unique([userId, seasonId, gwId]) in Prisma
         userId_seasonId_gwId: {
