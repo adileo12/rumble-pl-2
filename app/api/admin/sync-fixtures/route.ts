@@ -1,4 +1,5 @@
 // app/api/admin/sync-fixtures/route.ts
+import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/src/lib/db";
 
