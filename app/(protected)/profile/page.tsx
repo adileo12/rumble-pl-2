@@ -2,8 +2,39 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Eye, EyeOff, Pencil, Save } from "lucide-react";
 import { useRouter } from "next/navigation";
+
+// Tiny inline icons so we don't depend on lucide-react
+function IconEye(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" {...props}>
+      <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12Z" fill="none" stroke="currentColor"/>
+      <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor"/>
+    </svg>
+  );
+}
+function IconEyeOff(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" {...props}>
+      <path d="M3 3l18 18M10.6 10.6A3 3 0 0 0 12 15a3 3 0 0 0 2.4-1.2M9.9 4.2A11.6 11.6 0 0 1 12 4c7 0 11 8 11 8a18.3 18.3 0 0 1-4.2 5.1M6.1 6.1A18.3 18.3 0 0 0 1 12s4 8 11 8c1 0 1.9-.1 2.8-.3" fill="none" stroke="currentColor"/>
+    </svg>
+  );
+}
+function IconPencil(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" {...props}>
+      <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z" fill="none" stroke="currentColor"/>
+    </svg>
+  );
+}
+function IconSave(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" {...props}>
+      <path d="M17 3H5a2 2 0 0 0-2 2v14l4-4h12a2 2 0 0 0 2-2V7l-4-4Z" fill="none" stroke="currentColor"/>
+      <path d="M17 3v4H7V3" fill="none" stroke="currentColor"/>
+    </svg>
+  );
+}
 
 type MeResponse = { user: { id: string; name: string; isAdmin: boolean } | null };
 
@@ -28,13 +59,11 @@ export default function ProfilePage() {
   useEffect(() => {
     (async () => {
       try {
-        // who am I?
         const me = await fetch("/api/auth/me", { cache: "no-store" }).then(r => r.json() as Promise<MeResponse>);
         const admin = !!me.user?.isAdmin;
         setIsAdmin(admin);
-        if (admin) return; // block admins from this page per spec
+        if (admin) return;
 
-        // load email
         const r = await fetch("/api/profile/email", { cache: "no-store" });
         const j = await r.json();
         if (!r.ok) {
@@ -68,7 +97,6 @@ export default function ProfilePage() {
       });
       const j = await r.json();
       if (!r.ok) {
-        // map known errors to friendly messages
         if (j?.error === "INVALID_EMAIL_FORMAT") setEmailError("Please enter a valid email address.");
         else if (j?.error === "EMAIL_ALREADY_IN_USE") setEmailError("That email is already in use.");
         else setEmailError("Could not save email.");
@@ -114,7 +142,7 @@ export default function ProfilePage() {
               onClick={() => setEmailEditing(true)}
               title="Edit email"
             >
-              <Pencil className="h-4 w-4" /> Edit
+              <IconPencil /> Edit
             </button>
           ) : null}
         </div>
@@ -153,7 +181,7 @@ export default function ProfilePage() {
                 disabled={emailSaving}
                 title="Save email"
               >
-                <Save className="h-4 w-4" />
+                <IconSave />
                 {emailSaving ? "Saving…" : "Save"}
               </button>
             </div>
@@ -174,7 +202,7 @@ export default function ProfilePage() {
               disabled={revealLoading}
               title="Reveal for 5 seconds"
             >
-              {masked ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+              {masked ? <IconEye /> : <IconEyeOff />}
               {masked ? "Reveal" : "Hide"}
             </button>
             <button
@@ -182,7 +210,7 @@ export default function ProfilePage() {
               onClick={() => router.push("/profile/secret")}
               title="Change secret code"
             >
-              <Pencil className="h-4 w-4" /> Edit
+              <IconPencil /> Edit
             </button>
           </div>
         </div>
@@ -193,9 +221,7 @@ export default function ProfilePage() {
           readOnly
         />
         {secretError && <p className="text-sm text-red-600">{secretError}</p>}
-        <p className="text-xs text-muted-foreground">
-          The secret code is shown only for 5 seconds after you click Reveal.
-        </p>
+        <p className="text-xs text-muted-foreground">The secret code is shown only for 5 seconds after you click Reveal.</p>
       </section>
     </div>
   );
