@@ -90,9 +90,25 @@ export default function SecretChangePage() {
             className="px-3 py-1.5 rounded-lg border hover:bg-muted"
             onClick={() => history.back()}
             disabled={submitting}
-          >
+          >  
             Back
           </button>
+const score = useMemo(() => {
+  let s = 0;
+  if (newSecret.length >= 8) s++;
+  if (/[A-Za-z]/.test(newSecret)) s++;
+  if (/\d/.test(newSecret)) s++;
+  if (/[^A-Za-z0-9]/.test(newSecret)) s++;
+  return s; // 0-4
+}, [newSecret]);
+
+<div className="mt-1 h-1 w-full bg-muted rounded">
+  <div className="h-1 rounded" style={{ width: `${(score/4)*100}%`, background: score >= 3 ? "#16a34a" : "#f59e0b" }} />
+</div>
+<p className="text-xs text-muted-foreground">
+  Strength: {["Very weak","Weak","Okay","Good","Strong"][score] ?? "Very weak"}
+</p>
+          
           <button
             type="submit"
             className="px-3 py-1.5 rounded-lg border hover:bg-muted disabled:opacity-60"
