@@ -18,6 +18,13 @@ model User {
   updatedAt          DateTime       @updatedAt
 
   email              String?        @unique(map: "User_email_key")
+  emailVerifiedAt    DateTime?
+  avatarUrl          String?
+
+  notifyDeadline     Boolean        @default(false)
+  notifyReport       Boolean        @default(false)
+  notifyElimination  Boolean        @default(false)
+
   adminPassword      String?        @map("admin_password")
   adminPasswordHash  String?        @map("adminpasswordhash")
   lastName           String?
@@ -225,4 +232,18 @@ model RumbleReport {
 
   @@id([seasonId, gwNumber])
   @@map("RumbleReport")
+}
+
+model EmailVerification {
+  id         String   @id @default(uuid())
+  userId     String
+  email      String
+  code       String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
 }
