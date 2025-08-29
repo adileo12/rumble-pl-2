@@ -1,29 +1,35 @@
 // app/(protected)/profile/secret/page.tsx
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-const rules = [
-  "At least 8 characters long",
-  "Must include letters (A–Z or a–z)",
-  "Must include numbers (0–9)",
-  "Must include a special character (e.g., ! @ # $ % & *)",
-];
-
-export default function SecretChangePage() {
+export default function ChangeSecretPage() {
   const router = useRouter();
+
   const [currentSecret, setCurrentSecret] = useState("");
   const [newSecret, setNewSecret] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [ok, setOk] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [okMsg, setOkMsg] = useState<string | null>(null);
+
+  // simple client-side strength evaluation (server remains source of truth)
+  const score = useMemo(() => {
+    let s = 0;
+    if (newSecret.length >= 8) s++;
+    if (/[A-Za-z]/.test(newSecret)) s++;
+    if (/\d/.test(newSecret)) s++;
+    if (/[^A-Za-z0-9]/.test(newSecret)) s++;
+    return s; // 0..4
+  }, [newSecret]);
+
+  const strengthLabel = ["Very weak", "Weak", "Okay", "Good", "Strong"][score] ?? "Very weak";
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
-    setError(null);
-    setOk(null);
+    setErrorMsg(null);
+    setOkMsg(null);
 
     try {
       const r = await fetch("/api/profile/secret", {
@@ -34,15 +40,34 @@ export default function SecretChangePage() {
       const j = await r.json();
 
       if (!r.ok) {
-        if (j?.error === "CURRENT_SECRET_INCORRECT") setError("The current secret code is incorrect.");
-        else if (j?.error === "NEW_SECRET_WEAK") setError("The new secret code does not meet the requirements.");
-        else if (j?.error === "Forbidden") setError("Admins cannot change secret here.");
-        else setError("Failed to change secret code.");
+        // Map known server errors to friendly messages
+        switch (j?.error) {
+          case "CURRENT_SECRET_REQUIRED":
+            setErrorMsg("Please enter your current secret code.");
+            break;
+          case "NEW_SECRET_REQUIRED":
+            setErrorMsg("Please enter a new secret code.");
+            break;
+          case "CURRENT_SECRET_INVALID":
+            setErrorMsg("The current secret code is incorrect.");
+            break;
+          case "NEW_SECRET_TOO_SHORT":
+            setErrorMsg("New secret must be at least 8 characters long.");
+            break;
+          case "NEW_SECRET_WEAK":
+            setErrorMsg("New secret must include letters, numbers, and a special character.");
+            break;
+          default:
+            setErrorMsg(j?.error ?? "Could not change the secret code.");
+        }
         return;
       }
 
-      setOk("Secret code updated successfully. Redirecting to Profile…");
+      setOkMsg("Secret changed successfully.");
+      // small delay so the user sees the success, then go back to Profile
       setTimeout(() => router.push("/profile"), 800);
+    } catch (err) {
+      setErrorMsg("Unexpected error. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -53,73 +78,70 @@ export default function SecretChangePage() {
       <h1 className="text-2xl font-semibold">Change Secret Code</h1>
 
       <form onSubmit={onSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Current */}
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Current secret code</label>
+        {/* Current secret */}
+        <div className="rounded-2xl border p-4 space-y-3">
+          <h2 className="font-medium">Current secret code</h2>
           <input
             className="w-full border rounded-lg px-3 py-2"
             type="password"
             value={currentSecret}
             onChange={(e) => setCurrentSecret(e.target.value)}
-            autoComplete="off"
+            placeholder="Enter current secret"
             autoFocus
           />
         </div>
 
-        {/* New */}
-        <div className="space-y-2">
-          <label className="text-sm font-medium">New secret code</label>
+        {/* New secret */}
+        <div className="rounded-2xl border p-4 space-y-3">
+          <h2 className="font-medium">New secret code</h2>
           <input
             className="w-full border rounded-lg px-3 py-2"
             type="password"
             value={newSecret}
             onChange={(e) => setNewSecret(e.target.value)}
-            autoComplete="off"
+            placeholder="Choose a new secret"
           />
-          <ul className="list-disc pl-5 text-xs text-muted-foreground space-y-1">
-            {rules.map((r) => (
-              <li key={r}>{r}</li>
-            ))}
+
+          {/* Strength meter */}
+          <div className="mt-1 h-1 w-full bg-muted rounded">
+            <div
+              className="h-1 rounded"
+              style={{
+                width: `${(score / 4) * 100}%`,
+                background: score >= 3 ? "#16a34a" : "#f59e0b",
+              }}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">Strength: {strengthLabel}</p>
+
+          <ul className="list-disc pl-5 text-sm text-muted-foreground space-y-1 mt-2">
+            <li>At least 8 characters</li>
+            <li>Includes letters (A–Z)</li>
+            <li>Includes numbers (0–9)</li>
+            <li>Includes a special character (e.g., ! @ # $ %)</li>
           </ul>
         </div>
 
         {/* Actions & messages */}
-        <div className="md:col-span-2 flex items-center gap-2">
-          <button
-            type="button"
-            className="px-3 py-1.5 rounded-lg border hover:bg-muted"
-            onClick={() => history.back()}
-            disabled={submitting}
-          >  
-            Back
-          </button>
-const score = useMemo(() => {
-  let s = 0;
-  if (newSecret.length >= 8) s++;
-  if (/[A-Za-z]/.test(newSecret)) s++;
-  if (/\d/.test(newSecret)) s++;
-  if (/[^A-Za-z0-9]/.test(newSecret)) s++;
-  return s; // 0-4
-}, [newSecret]);
-
-<div className="mt-1 h-1 w-full bg-muted rounded">
-  <div className="h-1 rounded" style={{ width: `${(score/4)*100}%`, background: score >= 3 ? "#16a34a" : "#f59e0b" }} />
-</div>
-<p className="text-xs text-muted-foreground">
-  Strength: {["Very weak","Weak","Okay","Good","Strong"][score] ?? "Very weak"}
-</p>
-          
+        <div className="md:col-span-2 flex items-center gap-3">
           <button
             type="submit"
             className="px-3 py-1.5 rounded-lg border hover:bg-muted disabled:opacity-60"
             disabled={submitting}
           >
-            {submitting ? "Submitting…" : "Submit"}
+            {submitting ? "Updating…" : "Submit"}
           </button>
-        </div>
+          <button
+            type="button"
+            className="px-3 py-1.5 rounded-lg border hover:bg-muted"
+            onClick={() => router.push("/profile")}
+          >
+            Cancel
+          </button>
 
-        {error && <p className="md:col-span-2 text-sm text-red-600">{error}</p>}
-        {ok && <p className="md:col-span-2 text-sm text-green-600">{ok}</p>}
+          {errorMsg && <span className="text-sm text-red-600">{errorMsg}</span>}
+          {okMsg && <span className="text-sm text-green-600">{okMsg}</span>}
+        </div>
       </form>
     </div>
   );
