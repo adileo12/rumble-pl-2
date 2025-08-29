@@ -34,6 +34,8 @@ model User {
   sessions           Session[]
   jokerUsages        JokerUsage[]
 
+    emailVerifications EmailVerification[]
+
   @@map("User")
   @@index([name])
 }
