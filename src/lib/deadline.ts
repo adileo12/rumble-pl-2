@@ -7,9 +7,10 @@ function minusMinutes(dt: Date, minutes: number) {
 }
 
 /** Compute T-30 from the earliest kickoff among given fixtures. */
-export function computeFixtureBasedDeadline(kickoffs: Date[]): Date | null {
-  if (!kickoffs.length) return null;
-  const earliest = new Date(Math.min(...kickoffs.map(d => d.getTime())));
+export function computeFixtureBasedDeadline(kickoffs: (Date | null)[]): Date | null {
+  const ks = kickoffs.filter(Boolean) as Date[];
+  if (!ks.length) return null;
+  const earliest = new Date(Math.min(...ks.map((d) => d.getTime())));
   return minusMinutes(earliest, 30);
 }
 
@@ -17,7 +18,6 @@ export function computeFixtureBasedDeadline(kickoffs: Date[]): Date | null {
  * Unified / effective deadline for a GW:
  * - If Gameweek.deadline is set, use it.
  * - Else compute from fixtures (earliest kickoff - 30m).
- * Returns null if neither available.
  */
 export async function effectiveDeadline(gwId: string): Promise<Date | null> {
   const gw = await db.gameweek.findUnique({
@@ -26,29 +26,26 @@ export async function effectiveDeadline(gwId: string): Promise<Date | null> {
   });
   if (gw?.deadline) return gw.deadline;
 
-  // fallback: compute from fixtures
   const fixtures = await db.fixture.findMany({
     where: { gwId },
-    select: { kickoffAt: true },
+    select: { kickoff: true }, // <-- kickoff (not kickoffAt)
   });
-  const kickoffs = fixtures.map(f => f.kickoffAt).filter(Boolean) as Date[];
-  return computeFixtureBasedDeadline(kickoffs);
+  return computeFixtureBasedDeadline(fixtures.map((f) => f.kickoff));
 }
 
 /**
- * Given a season, find the GW with the **soonest future effective deadline**.
- * If none are in the future, returns null.
+ * Given a season, find the GW with the soonest future effective deadline.
+ * If none are in the future, returns { gw: null, deadline: null }.
  */
 export async function nextGwByEffectiveDeadline(seasonId: string): Promise<{
   gw: { id: string; number: number; seasonId: string } | null;
   deadline: Date | null;
 }> {
-  // Pull a reasonable set of upcoming GWs for this season
   const gws = await db.gameweek.findMany({
     where: { seasonId },
     select: { id: true, number: true, seasonId: true, deadline: true },
     orderBy: [{ number: "asc" }],
-    take: 50, // guardrail; adjust if your season is larger
+    take: 50,
   });
 
   const now = Date.now();
@@ -59,12 +56,10 @@ export async function nextGwByEffectiveDeadline(seasonId: string): Promise<{
     if (!eff) {
       const fixtures = await db.fixture.findMany({
         where: { gwId: gw.id },
-        select: { kickoffAt: true },
+        select: { kickoff: true }, // <-- kickoff (not kickoffAt)
         take: 100,
       });
-      eff = computeFixtureBasedDeadline(
-        fixtures.map(f => f.kickoffAt).filter(Boolean) as Date[]
-      );
+      eff = computeFixtureBasedDeadline(fixtures.map((f) => f.kickoff));
     }
     if (!eff) continue;
     if (eff.getTime() <= now) continue;
