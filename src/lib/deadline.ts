@@ -28,7 +28,7 @@ export async function effectiveDeadline(gwId: string): Promise<Date | null> {
 
   const fixtures = await db.fixture.findMany({
     where: { gwId },
-    select: { kickoff: true }, // <-- kickoff (not kickoffAt)
+    select: { kickoff: true }, // <- your schema uses `kickoff`
   });
   return computeFixtureBasedDeadline(fixtures.map((f) => f.kickoff));
 }
@@ -52,17 +52,22 @@ export async function nextGwByEffectiveDeadline(seasonId: string): Promise<{
   let best: { gw: { id: string; number: number; seasonId: string }; deadline: Date } | null = null;
 
   for (const gw of gws) {
-    let eff = gw.deadline ?? null;
+    // Explicit union so we can assign a possibly-null computed deadline later.
+    let eff: Date | null = (gw as { deadline: Date | null }).deadline ?? null;
+
     if (!eff) {
       const fixtures = await db.fixture.findMany({
         where: { gwId: gw.id },
-        select: { kickoff: true }, // <-- kickoff (not kickoffAt)
+        select: { kickoff: true },
         take: 100,
       });
-      eff = computeFixtureBasedDeadline(fixtures.map((f) => f.kickoff));
+      const computed = computeFixtureBasedDeadline(fixtures.map((f) => f.kickoff));
+      eff = computed; // eff is Date | null, so this is safe
     }
+
     if (!eff) continue;
     if (eff.getTime() <= now) continue;
+
     if (!best || eff < best.deadline) {
       best = { gw: { id: gw.id, number: gw.number, seasonId: gw.seasonId }, deadline: eff };
     }
