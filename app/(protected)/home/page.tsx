@@ -2,6 +2,7 @@ import React from "react";
 import Link from "next/link";
 import { headers, cookies } from "next/headers";
 import { db } from "@/src/lib/db";
+import { nextGwByEffectiveDeadline } from "@/src/lib/deadline";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -46,20 +47,21 @@ function relTo(d?: Date | string | null) {
 
 /* ---------- data ---------- */
 async function fetchNextGw(): Promise<NextGw | null> {
-  const anyDb = db as any;
-  const now = new Date();
-  const client = anyDb?.gameweek ?? anyDb?.Gameweek;
-  if (!client?.findFirst) return null;
-  try {
-    const gw = await client.findFirst({
-      where: { deadline: { gt: now } },
-      orderBy: { deadline: "asc" },
-      select: { seasonId: true, number: true, deadline: true },
-    });
-    return gw ? { seasonId: gw.seasonId, gwNumber: gw.number, deadline: gw.deadline } : null;
-  } catch {
-    return null;
-  }
+  // Use the unified effective deadline (stored or fixtures T-30)
+  const season = await db.season.findFirst({
+    where: { isActive: true },
+    select: { id: true },
+  });
+  if (!season) return null;
+
+  const { gw, deadline } = await nextGwByEffectiveDeadline(season.id);
+  if (!gw || !deadline) return null;
+
+  return {
+    seasonId: gw.seasonId,
+    gwNumber: gw.number,
+    deadline, // Date; UI helpers accept Date|string|null
+  };
 }
 
 async function fetchLatestReport(): Promise<LatestReport | null> {
