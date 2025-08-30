@@ -2,15 +2,9 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { db } from "@/src/lib/db";
+import { effectiveDeadline } from "@/src/lib/deadline";
 
 // ---------- helpers ----------
-function computeDeadline(kickoffs: (Date | null)[]) {
-  const ks = kickoffs.filter(Boolean) as Date[];
-  if (!ks.length) return null;
-  const earliest = new Date(Math.min(...ks.map((d) => d.getTime())));
-  return new Date(earliest.getTime() - 30 * 60 * 1000); // T-30m
-}
-
 async function last5Form(clubId: string, before: Date) {
   const rows = await db.fixture.findMany({
     where: {
@@ -63,28 +57,18 @@ export async function GET() {
     });
   }
 
-  // 2) current gameweek: nearest future deadline, else most recent past
+  // 2) current gameweek: nearest future stored deadline, else most recent past
   const now = new Date();
-  let gw =
+  const gw =
     (await db.gameweek.findFirst({
       where: { seasonId: season.id, deadline: { gte: now } },
       orderBy: { deadline: "asc" },
-      select: {
-        id: true,
-        number: true,
-        isLocked: true,
-        deadline: true,
-      },
+      select: { id: true, number: true, isLocked: true, deadline: true },
     })) ??
     (await db.gameweek.findFirst({
       where: { seasonId: season.id, deadline: { lt: now } },
       orderBy: { deadline: "desc" },
-      select: {
-        id: true,
-        number: true,
-        isLocked: true,
-        deadline: true,
-      },
+      select: { id: true, number: true, isLocked: true, deadline: true },
     }));
 
   if (!gw) {
@@ -106,18 +90,13 @@ export async function GET() {
   const fixtures = await db.fixture.findMany({
     where: { gwId: gw.id },
     orderBy: { kickoff: "asc" },
-    select: {
-      id: true,
-      kickoff: true,
-      status: true,
-      homeClubId: true,
-      awayClubId: true,
-    },
+    select: { id: true, kickoff: true, status: true, homeClubId: true, awayClubId: true },
   });
 
-  // deadline (trust GW.deadline if present; else derive)
-  const derived = computeDeadline(fixtures.map((f) => f.kickoff));
-const deadline = derived;
+  // 3.5) unified / effective deadline (stored GW.deadline or fixtures T-30)
+  const eff = await effectiveDeadline(gw.id);
+  const effIso = eff ? eff.toISOString() : null;
+  const isLocked = eff ? Date.now() > eff.getTime() : false;
 
   // 4) clubs (active)
   const clubs = await db.club.findMany({
@@ -126,7 +105,7 @@ const deadline = derived;
     select: { id: true, name: true, shortName: true },
   });
 
-  // 5) current pick (for UX hint) — ensure object | null (not a string union)
+  // 5) current pick (for UX hint)
   const currentPick: { clubId: string } | null = sid
     ? await db.pick.findUnique({
         where: { userId_gwId: { userId: sid, gwId: gw.id } },
@@ -134,28 +113,23 @@ const deadline = derived;
       })
     : null;
 
-  // 6) clubs you used earlier this season (server-enforced carry-forward)
+  // 6) clubs used earlier this season
   let usedClubIds: string[] = [];
   if (sid) {
-    // picks from earlier GWs
     const past = await db.pick.findMany({
-      where: {
-        userId: sid,
-        seasonId: season.id,
-        gw: { number: { lt: gw.number } }, // relation filter
-      },
+      where: { userId: sid, seasonId: season.id, gw: { number: { lt: gw.number } } },
       select: { clubId: true },
     });
     usedClubIds = Array.from(new Set(past.map((p) => p.clubId)));
 
-    // If deadline passed, also lock the current GW pick into the used set
-    if (deadline && Date.now() > deadline.getTime() && currentPick && currentPick.clubId) {
+    // If the unified deadline has passed, include the current pick in used set
+    if (eff && Date.now() > eff.getTime() && currentPick?.clubId) {
       if (!usedClubIds.includes(currentPick.clubId)) usedClubIds.push(currentPick.clubId);
     }
   }
 
   // 7) last-5 form table (cutoff: up to "now" if pre-deadline, else up to deadline)
-  const cutoff = deadline && Date.now() > deadline.getTime() ? deadline : new Date();
+  const cutoff = eff && Date.now() > eff.getTime() ? eff : new Date();
 
   const clubById = new Map(clubs.map((c) => [c.id, c]));
   const table = await Promise.all(
@@ -185,15 +159,10 @@ const deadline = derived;
     ok: true,
     data: {
       season,
-      gw: {
-        id: gw.id,
-        number: gw.number,
-        isLocked: Boolean(deadline && Date.now() > deadline.getTime()),
-        deadline: deadline ? deadline.toISOString() : null,
-      },
+      gw: { id: gw.id, number: gw.number, isLocked, deadline: effIso },
       fixtures: table,
       clubs,
-      deadline: deadline ? deadline.toISOString() : null,
+      deadline: effIso, // root-level mirror for existing UI
       pickedClubId: currentPick?.clubId ?? null,
       usedClubIds,
     },
