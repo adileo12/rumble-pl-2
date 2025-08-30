@@ -2,13 +2,14 @@
 import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { db } from "@/src/lib/db";
+import { nextGwByEffectiveDeadline } from "@/src/lib/deadline";
 
 export const runtime = "nodejs"; // IMPORTANT: Prisma needs Node runtime
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 type Body = {
-  seasonId?: string;     // optional — we’ll infer active if missing
+  seasonId?: string; // optional — we’ll infer active if missing
   clubId: string;
 };
 
@@ -23,29 +24,6 @@ async function getViewerId(): Promise<string | null> {
   } catch {
     return null;
   }
-}
-
-/** Use schema: Gameweek { id, seasonId, number, deadline, isLocked } */
-async function getActiveOrNextGwForSubmission(seasonId: string) {
-  const now = new Date();
-
-  // Choose the soonest future deadline; else fall back to latest past gw (if you want).
-  const upcoming = await db.gameweek.findFirst({
-    where: { seasonId, deadline: { gt: now } },
-    orderBy: { deadline: "asc" },
-    select: { id: true, number: true, deadline: true, isLocked: true },
-  });
-
-  if (upcoming) return upcoming;
-
-  // Optional: fall back to the latest gw by number if nothing is upcoming
-  const latest = await db.gameweek.findFirst({
-    where: { seasonId },
-    orderBy: { number: "desc" },
-    select: { id: true, number: true, deadline: true, isLocked: true },
-  });
-
-  return latest ?? null;
 }
 
 /** Check if club already used in this season (Pick has gwId, not gwNumber) */
@@ -79,20 +57,21 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: "No active season" }, { status: 400 });
     }
 
-    const gw = await getActiveOrNextGwForSubmission(season.id);
-    if (!gw) {
+    // Choose target GW by the soonest future *effective* deadline (stored or fixtures T-30)
+    const { gw: targetGw, deadline: eff } = await nextGwByEffectiveDeadline(season.id);
+    if (!targetGw || !eff) {
       return NextResponse.json({ ok: false, error: "No active or upcoming Gameweek" }, { status: 409 });
     }
 
-    // Deadline guard (T-30 min of first kickoff would be better; using GW.deadline here)
-    if (gw.deadline && new Date() >= gw.deadline) {
+    // Authoritative deadline guard
+    if (Date.now() >= eff.getTime()) {
       return NextResponse.json({ ok: false, error: "DEADLINE_PASSED" }, { status: 409 });
     }
 
     // Ensure this club actually plays in this GW
     const fixture = await db.fixture.findFirst({
       where: {
-        gwId: gw.id,
+        gwId: targetGw.id,
         OR: [{ homeClubId: clubId }, { awayClubId: clubId }],
       },
       select: { id: true },
@@ -112,14 +91,14 @@ export async function POST(req: Request) {
         userId_seasonId_gwId: {
           userId: viewerId,
           seasonId: season.id,
-          gwId: gw.id,
+          gwId: targetGw.id,
         },
       },
       update: { clubId },
       create: {
         userId: viewerId,
         seasonId: season.id,
-        gwId: gw.id,
+        gwId: targetGw.id,
         clubId,
         // source: defaults to "USER" in schema; omit or set explicitly if desired
       },
