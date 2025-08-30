@@ -13,7 +13,7 @@ export const revalidate = 0;
 
 export async function POST() {
   try {
-    // Active season
+    // 1) Active season
     const season = await db.season.findFirst({
       where: { isActive: true },
       select: { id: true },
@@ -22,7 +22,7 @@ export async function POST() {
       return NextResponse.json({ ok: false, error: "No active season" }, { status: 400 });
     }
 
-    // All GWs (ordered)
+    // 2) All GWs (ordered by number)
     const gws = await db.gameweek.findMany({
       where: { seasonId: season.id },
       select: { id: true, number: true },
@@ -32,7 +32,7 @@ export async function POST() {
       return NextResponse.json({ ok: false, error: "No gameweeks for season" }, { status: 400 });
     }
 
-    // Find the most recent GW whose effective deadline has passed
+    // 3) Most recent GW whose effective deadline has passed
     const now = Date.now();
     let targetGw: { id: string; number: number } | null = null;
     let targetEff: Date | null = null;
@@ -52,11 +52,12 @@ export async function POST() {
       return NextResponse.json({ ok: true, info: "No passed deadlines to process" });
     }
 
-    // (Optional) previous GW effective deadline (not strictly needed if we only care that a manual pick exists before current eff)
-    const prevIndex = gws.findIndex(x => x.id === targetGw!.id) - 1;
-    const prevEff = prevIndex >= 0 ? await effectiveDeadline(gws[prevIndex].id) : null;
+    // 4) Previous GW effective deadline (for the window lower bound)
+    const idx = gws.findIndex(x => x.id === targetGw!.id);
+    const prevGw = idx > 0 ? gws[idx - 1] : null;
+    const prevEff = prevGw ? await effectiveDeadline(prevGw.id) : null;
 
-    // Alive participants
+    // 5) Alive users
     const users = await db.user.findMany({
       where: { alive: true },
       select: { id: true },
@@ -65,24 +66,27 @@ export async function POST() {
     const results: Array<Record<string, any>> = [];
 
     for (const u of users) {
-      // If user already has a USER pick for this GW (submitted before current deadline), do nothing
+      // 5a) Did user make a MANUAL pick in the exact window [prevEff, targetEff)?
+      // If prevEff is null (first GW), accept any manual pick strictly before targetEff.
       const manualPick = await db.pick.findFirst({
         where: {
           userId: u.id,
           seasonId: season.id,
           gwId: targetGw.id,
           source: "USER",
-          // safest: ensure it's not after the deadline (if timestamps exist)
-          // createdAt: { lt: targetEff }  // uncomment if your Pick has createdAt
+          ...(prevEff
+            ? { createdAt: { gte: prevEff, lt: targetEff } }
+            : { createdAt: { lt: targetEff } }),
         },
         select: { id: true },
       });
+
       if (manualPick) {
         results.push({ userId: u.id, action: "kept-user-pick" });
         continue;
       }
 
-      // If any pick already exists (e.g., job rerun, or proxy already assigned), skip
+      // 5b) If any pick already exists for this GW, skip (idempotency / reruns)
       const anyPick = await db.pick.findUnique({
         where: { userId_seasonId_gwId: { userId: u.id, seasonId: season.id, gwId: targetGw.id } },
         select: { id: true, source: true },
@@ -92,12 +96,12 @@ export async function POST() {
         continue;
       }
 
-      // Proxy usage cap: 2 per season (computed by counting PROXY picks)
+      // 5c) Proxy usage cap = 2 per season (computed)
       const used = await proxiesUsedThisSeason(u.id, season.id);
       const remaining = Math.max(0, 2 - used);
 
       if (remaining > 0) {
-        // Alphabetical first valid club that plays in this GW and not used by user this season
+        // Alphabetical first valid club that plays this GW and is unused this season
         const proxyClubId = await pickProxyClubForUserAlpha({
           seasonId: season.id,
           userId: u.id,
@@ -105,19 +109,19 @@ export async function POST() {
         });
 
         if (!proxyClubId) {
-          // No valid candidate (all clubs already used / no fixtures) → eliminate
+          // No valid candidate ⇒ eliminate
           await db.user.update({
             where: { id: u.id },
             data: {
               alive: false,
-              // eliminatedAtGw: targetGw.number, // <-- Your schema doesn't have this; add later if you want to store it.
+              // eliminatedAtGw: targetGw.number, // uncomment once you've added this column in Prisma
             } as any,
           });
           results.push({ userId: u.id, action: "eliminated-no-candidate" });
           continue;
         }
 
-        // Create proxy pick (idempotent via compound unique)
+        // 5d) Create proxy pick (idempotent via compound unique)
         await db.pick.upsert({
           where: { userId_seasonId_gwId: { userId: u.id, seasonId: season.id, gwId: targetGw.id } },
           update: { clubId: proxyClubId, source: "PROXY" },
@@ -134,12 +138,12 @@ export async function POST() {
         continue;
       }
 
-      // No proxies left → eliminate
+      // 5e) No proxies left ⇒ eliminate
       await db.user.update({
         where: { id: u.id },
         data: {
           alive: false,
-          // eliminatedAtGw: targetGw.number, // <-- add field later if desired
+          // eliminatedAtGw: targetGw.number, // uncomment once you've added this column in Prisma
         } as any,
       });
       results.push({ userId: u.id, action: "eliminated-no-proxies" });
