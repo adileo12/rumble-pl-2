@@ -1,112 +1,76 @@
-import { cookies } from "next/headers";
+// app/api/admin/reports/gw/sweep/route.ts
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { db } from "@/src/lib/db";
-import { quickChartUrl } from "@/src/lib/quickchart";
-import { eliminationSVG } from "@/src/lib/svg";
+import { effectiveDeadline } from "@/src/lib/deadline";
 
-function assertCronAuth(req: Request) {
-  const expected = process.env.CRON_SECRET;
-  if (!expected) return;
-  const auth = req.headers.get("authorization");
-  if (auth !== `Bearer ${expected}`) throw new Error("Unauthorized");
-}
-
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export async function POST(req: Request) {
+export async function POST() {
   try {
-    assertCronAuth(req);
+    // Admin check
+    const sid = cookies().get("sid")?.value ?? null;
+    const viewer = sid
+      ? await db.user.findUnique({ where: { id: sid }, select: { isAdmin: true } })
+      : null;
+    if (!viewer?.isAdmin) {
+      return NextResponse.json({ ok: false, error: "Forbidden" }, { status: 403 });
+    }
 
-    // Sweep the last ~36h of deadlines
-    const now = new Date();
-    const since = new Date(now.getTime() - 36 * 60 * 60 * 1000);
+    const season = await db.season.findFirst({ where: { isActive: true }, select: { id: true } });
+    if (!season) return NextResponse.json({ ok: false, error: "No active season" }, { status: 400 });
 
     const gws = await db.gameweek.findMany({
-      where: { deadline: { lte: now, gte: since } },
-      select: { id: true, number: true, seasonId: true, graded: true },
-      orderBy: [{ seasonId: "asc" }, { number: "asc" }],
+      where: { seasonId: season.id },
+      select: { id: true, number: true },
+      orderBy: { number: "asc" },
     });
 
-    const out: any[] = [];
+    const now = Date.now();
+    const processed: Array<{ gwNumber: number; ok: boolean; message?: string }> = [];
 
     for (const gw of gws) {
-      const exists = await db.rumbleReport.findUnique({
-        where: { seasonId_gwNumber: { seasonId: gw.seasonId, gwNumber: gw.number } },
-        select: { seasonId: true },
-      });
-      if (exists) { out.push({ seasonId: gw.seasonId, gw: gw.number, already: true }); continue; }
+      const eff = await effectiveDeadline(gw.id);
+      if (!eff || eff.getTime() > now) {
+        processed.push({ gwNumber: gw.number, ok: false, message: "skipped (not locked yet)" });
+        continue;
+      }
 
-      // === A: club pie
-      const clubCounts = await db.pick.groupBy({
+      // Build minimal report (reuse logic from the single-GW route)
+      const byClub = await db.pick.groupBy({
         by: ["clubId"],
-        where: { seasonId: gw.seasonId, gwId: gw.id },
-        _count: { clubId: true },
+        where: { seasonId: season.id, gwId: gw.id },
+        _count: { _all: true },
       });
-      const clubs = clubCounts.length
+      const clubIds = byClub.map((x) => x.clubId);
+      const clubs = clubIds.length
         ? await db.club.findMany({
-            where: { id: { in: clubCounts.map(c => c.clubId) } },
+            where: { id: { in: clubIds } },
             select: { id: true, shortName: true, name: true },
           })
         : [];
-      const cMap = new Map(clubs.map(c => [c.id, c]));
-      const clubLabels = clubCounts.map(c => cMap.get(c.clubId)?.shortName ?? cMap.get(c.clubId)?.name ?? c.clubId);
-      const clubData = clubCounts.map(c => c._count.clubId);
-      const clubPieUrl = quickChartUrl(`Picks by club — GW ${gw.number}`, clubLabels, clubData);
+      const labelById = new Map(clubs.map((c) => [c.id, c.shortName ?? c.name]));
+      const counts = byClub
+        .map((x) => ({ label: labelById.get(x.clubId) ?? x.clubId, value: x._count._all }))
+        .sort((a, b) => a.label.localeCompare(b.label));
 
-      // === B: user vs proxy
-      const srcCounts = await db.pick.groupBy({
-        by: ["source"],
-        where: { seasonId: gw.seasonId, gwId: gw.id },
-        _count: { source: true },
-      });
-      const bySrc: Record<string, number> = {};
-      for (const row of srcCounts) bySrc[(row.source || "").toUpperCase()] = row._count.source;
-      const sourcePieUrl = quickChartUrl(
-        `Manual vs Proxy — GW ${gw.number}`,
-        ["Manual", "Proxy"],
-        [bySrc["USER"] ?? 0, bySrc["PROXY"] ?? 0]
-      );
-
-      // === C: eliminated
-      let eliminatedSvg: string | undefined;
-      if (gw.graded) {
-        const eliminatedStates = await db.rumbleState.findMany({
-          where: { seasonId: gw.seasonId, eliminatedAtGw: gw.number },
-          select: { userId: true },
-          orderBy: { userId: "asc" },
-        });
-        const userIds = eliminatedStates.map(e => e.userId);
-        const users = userIds.length
-          ? await db.user.findMany({
-              where: { id: { in: userIds } },
-              select: { id: true, name: true, email: true },
-            })
-          : [];
-        const uMap = new Map(users.map(u => [u.id, u]));
-        const names = userIds.map(id => {
-          const u = uMap.get(id);
-          const emailPrefix = u?.email?.split("@")[0] ?? "";
-          return (u?.name?.trim() || emailPrefix || "Unknown");
-        });
-        eliminatedSvg = eliminationSVG({ seasonId: gw.seasonId, gwNumber: gw.number, names });
-      }
-
-      const payload: any = { clubPieUrl, sourcePieUrl };
-      if (eliminatedSvg) payload.eliminatedSvg = eliminatedSvg;
+      const userCount = await db.pick.count({ where: { seasonId: season.id, gwId: gw.id, source: "USER" } });
+      const proxyCount = await db.pick.count({ where: { seasonId: season.id, gwId: gw.id, source: "PROXY" } });
 
       await db.rumbleReport.upsert({
-        where: { seasonId_gwNumber: { seasonId: gw.seasonId, gwNumber: gw.number } },
-        create: { seasonId: gw.seasonId, gwNumber: gw.number, payload },
-        update: { payload },
+        where: { seasonId_gwNumber: { seasonId: season.id, gwNumber: gw.number } as any },
+        update: { countsJson: counts as any, bySourceJson: { USER: userCount, PROXY: proxyCount } as any, updatedAt: new Date() } as any,
+        create: { seasonId: season.id, gwNumber: gw.number, countsJson: counts as any, bySourceJson: { USER: userCount, PROXY: proxyCount } as any } as any,
       });
 
-      out.push({ seasonId: gw.seasonId, gw: gw.number, created: true });
+      processed.push({ gwNumber: gw.number, ok: true });
     }
 
-    return NextResponse.json({ ok: true, gws: out }, { status: 200 });
+    return NextResponse.json({ ok: true, processed });
   } catch (err: any) {
-    const msg = err?.message === "Unauthorized" ? "Unauthorized" : (err?.message || "Internal error");
-    return NextResponse.json({ ok: false, error: msg }, { status: msg === "Unauthorized" ? 401 : 500 });
+    console.error("REPORT-SWEEP ERROR:", err);
+    return NextResponse.json({ ok: false, error: err?.message ?? "Internal error" }, { status: 500 });
   }
 }
