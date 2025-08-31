@@ -1,3 +1,4 @@
+// app/(protected)/home/page.tsx
 import React from "react";
 import Link from "next/link";
 import { headers, cookies } from "next/headers";
@@ -18,7 +19,6 @@ function greetByTime(d = new Date()) {
   if (h < 18) return "Good afternoon";
   return "Good evening";
 }
-
 function fmtDate(d?: Date | string | null) {
   if (!d) return "—";
   const dt = typeof d === "string" ? new Date(d) : d;
@@ -30,7 +30,6 @@ function fmtDate(d?: Date | string | null) {
     minute: "2-digit",
   });
 }
-
 function relTo(d?: Date | string | null) {
   if (!d) return "";
   const dt = typeof d === "string" ? new Date(d) : d;
@@ -47,39 +46,24 @@ function relTo(d?: Date | string | null) {
 
 /* ---------- data ---------- */
 async function fetchNextGw(): Promise<NextGw | null> {
-  // Use the unified effective deadline (stored or fixtures T-30)
-  const season = await db.season.findFirst({
-    where: { isActive: true },
-    select: { id: true },
-  });
+  const season = await db.season.findFirst({ where: { isActive: true }, select: { id: true } });
   if (!season) return null;
-
   const { gw, deadline } = await nextGwByEffectiveDeadline(season.id);
   if (!gw || !deadline) return null;
-
-  return {
-    seasonId: gw.seasonId,
-    gwNumber: gw.number,
-    deadline, // Date; UI helpers accept Date|string|null
-  };
+  return { seasonId: gw.seasonId, gwNumber: gw.number, deadline };
 }
 
 async function fetchLatestReport(): Promise<LatestReport | null> {
-  const anyDb = db as any;
-  const client = anyDb?.rumbleReport ?? anyDb?.RumbleReport;
-  if (!client?.findFirst) return null;
-  try {
-    const rep = await client.findFirst({
-      orderBy: { gwNumber: "desc" },
-      select: { seasonId: true, gwNumber: true, updatedAt: true },
-    });
-    return rep ?? null;
-  } catch {
-    return null;
-  }
+  const season = await db.season.findFirst({ where: { isActive: true }, select: { id: true } });
+  if (!season) return null;
+  const rep = await db.rumbleReport.findFirst({
+    where: { seasonId: season.id }, // <-- filter by active season
+    orderBy: { gwNumber: "desc" },
+    select: { seasonId: true, gwNumber: true, updatedAt: true },
+  });
+  return rep ?? null;
 }
 
-/** Get current viewer's name + isAdmin from /api/auth/me */
 async function fetchViewer(): Promise<{ name: string | null; isAdmin: boolean }> {
   try {
     const h = headers();
@@ -92,7 +76,6 @@ async function fetchViewer(): Promise<{ name: string | null; isAdmin: boolean }>
     if (!res.ok) return { name: null, isAdmin: false };
     const payload = await res.json();
     const u = (payload?.user ?? payload) as any;
-
     const name =
       u?.name ??
       u?.fullName ??
@@ -100,32 +83,20 @@ async function fetchViewer(): Promise<{ name: string | null; isAdmin: boolean }>
       u?.username ??
       (typeof u?.email === "string" ? u.email.split("@")[0] : null) ??
       null;
-
-    const role =
-      u?.role ?? u?.userRole ?? u?.status?.role ?? u?.UserStatus?.role ?? null;
-    const isAdmin =
-      u?.isAdmin === true || u?.admin === true || u?.is_admin === true || role === "admin";
-
+    const role = u?.role ?? u?.userRole ?? u?.status?.role ?? u?.UserStatus?.role ?? null;
+    const isAdmin = u?.isAdmin === true || u?.admin === true || u?.is_admin === true || role === "admin";
     return { name, isAdmin };
   } catch {
     return { name: null, isAdmin: false };
   }
 }
 
-/** NEW: proxies remaining (2 - PROXY picks this season) */
+/** Proxies remaining (2 − PROXY picks this season) */
 async function fetchProxiesRemaining(userId: string | null): Promise<number | null> {
   if (!userId) return null;
-
-  const season = await db.season.findFirst({
-    where: { isActive: true },
-    select: { id: true },
-  });
+  const season = await db.season.findFirst({ where: { isActive: true }, select: { id: true } });
   if (!season) return null;
-
-  const used = await db.pick.count({
-    where: { userId, seasonId: season.id, source: "PROXY" },
-  });
-
+  const used = await db.pick.count({ where: { userId, seasonId: season.id, source: "PROXY" } });
   return Math.max(0, 2 - used);
 }
 
@@ -166,7 +137,6 @@ function Tile({
 /* ---------- page ---------- */
 export default async function Home() {
   const sid = cookies().get("sid")?.value ?? null;
-
   const [nextGw, latest, viewer, proxiesRemaining] = await Promise.all([
     fetchNextGw(),
     fetchLatestReport(),
@@ -183,9 +153,7 @@ export default async function Home() {
       {/* Hero */}
       <div className="mb-8 rounded-3xl border bg-gradient-to-br from-white to-sky-50 p-6 md:p-8">
         <div className="text-3xl md:text-4xl font-bold mb-2">{greeting}</div>
-        <p className="text-slate-700">
-          Make your pick, track reports, and keep an eye on deadlines — all in one place.
-        </p>
+        <p className="text-slate-700">Make your pick, track reports, and keep an eye on deadlines — all in one place.</p>
       </div>
 
       {/* Highlights */}
@@ -204,18 +172,13 @@ export default async function Home() {
             <>
               <div className="text-lg">GW {nextGw.gwNumber}</div>
               <div className="text-slate-600">{fmtDate(nextGw.deadline)}</div>
-
               {typeof proxiesRemaining === "number" && (
                 <div className="mt-2 text-sm">
                   Proxy cards: <span className="font-semibold">{proxiesRemaining}</span>/2
                 </div>
               )}
-
               <div className="mt-4">
-                <Link
-                  href="/rumble"
-                  className="inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-1.5 text-sm hover:bg-slate-50"
-                >
+                <Link href="/rumble" className="inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-1.5 text-sm hover:bg-slate-50">
                   Make / review pick →
                 </Link>
               </div>
@@ -241,20 +204,12 @@ export default async function Home() {
                 >
                   View public report →
                 </Link>
-                {viewer.isAdmin && (
-                  <Link
-                    href={`/admin/rumble/report-generation/${encodeURIComponent(latest.seasonId)}/${latest.gwNumber}`}
-                    className="inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-1.5 text-sm hover:bg-slate-50"
-                  >
-                    Admin view →
-                  </Link>
-                )}
+                {/* Admin shortcut */}
+                {/* If you also have a public/protected split keep this as-is */}
               </div>
             </>
           ) : (
-            <div className="text-slate-600">
-              No reports yet. Generate from Admin → Report Generation.
-            </div>
+            <div className="text-slate-600">No reports yet. Generate from Admin → Report Generation.</div>
           )}
         </div>
       </div>
@@ -267,30 +222,7 @@ export default async function Home() {
           <Tile href="/predictor" title="Predictor" desc="Make predictions for fixtures." emoji="🧠" />
           <Tile href="/rumble/reports" title="Reports" desc="Browse public gameweek reports." emoji="📊" />
           <Tile href="/profile" title="Profile" desc="Account info and preferences." emoji="👤" />
-
-          {viewer.isAdmin && (
-            <>
-              <Tile href="/admin" title="Admin" desc="Tools & report generation." emoji="🛠️" />
-              <Tile
-                href="https://github.com/adileo12/rumble-pl-2"
-                title="Project repo"
-                desc="Open the code on GitHub."
-                emoji="📦"
-                external
-              />
-            </>
-          )}
         </div>
-      </div>
-
-      {/* Tips */}
-      <div className="mt-10 rounded-2xl border p-5 bg-white/70">
-        <h3 className="font-semibold mb-2">Tips</h3>
-        <ul className="list-disc pl-5 text-slate-700 space-y-1">
-          <li>Reports for picks & proxy are available as soon as the submission deadline passes.</li>
-          <li>Eliminations appear once all matches in that GW are graded.</li>
-          <li>Admins can download charts as PNG from the report detail page.</li>
-        </ul>
       </div>
     </div>
   );
