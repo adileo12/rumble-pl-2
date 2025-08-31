@@ -93,7 +93,6 @@ async function fetchViewer(): Promise<{ name: string | null; isAdmin: boolean }>
     const payload = await res.json();
     const u = (payload?.user ?? payload) as any;
 
-    // Derive a nice display name from common fields
     const name =
       u?.name ??
       u?.fullName ??
@@ -111,6 +110,23 @@ async function fetchViewer(): Promise<{ name: string | null; isAdmin: boolean }>
   } catch {
     return { name: null, isAdmin: false };
   }
+}
+
+/** NEW: proxies remaining (2 - PROXY picks this season) */
+async function fetchProxiesRemaining(userId: string | null): Promise<number | null> {
+  if (!userId) return null;
+
+  const season = await db.season.findFirst({
+    where: { isActive: true },
+    select: { id: true },
+  });
+  if (!season) return null;
+
+  const used = await db.pick.count({
+    where: { userId, seasonId: season.id, source: "PROXY" },
+  });
+
+  return Math.max(0, 2 - used);
 }
 
 /* ---------- UI bits ---------- */
@@ -149,10 +165,13 @@ function Tile({
 
 /* ---------- page ---------- */
 export default async function Home() {
-  const [nextGw, latest, viewer] = await Promise.all([
+  const sid = cookies().get("sid")?.value ?? null;
+
+  const [nextGw, latest, viewer, proxiesRemaining] = await Promise.all([
     fetchNextGw(),
     fetchLatestReport(),
     fetchViewer(),
+    fetchProxiesRemaining(sid),
   ]);
 
   const greeting = viewer.name
@@ -183,10 +202,15 @@ export default async function Home() {
           </div>
           {nextGw ? (
             <>
-              <div className="text-lg">
-                GW {nextGw.gwNumber}
-              </div>
+              <div className="text-lg">GW {nextGw.gwNumber}</div>
               <div className="text-slate-600">{fmtDate(nextGw.deadline)}</div>
+
+              {typeof proxiesRemaining === "number" && (
+                <div className="mt-2 text-sm">
+                  Proxy cards: <span className="font-semibold">{proxiesRemaining}</span>/2
+                </div>
+              )}
+
               <div className="mt-4">
                 <Link
                   href="/rumble"
@@ -208,9 +232,7 @@ export default async function Home() {
           </div>
           {latest ? (
             <>
-              <div className="text-lg">
-                GW {latest.gwNumber}
-              </div>
+              <div className="text-lg">GW {latest.gwNumber}</div>
               <div className="text-slate-600">Updated {relTo(latest.updatedAt)}</div>
               <div className="mt-4 flex gap-3">
                 <Link
@@ -230,7 +252,9 @@ export default async function Home() {
               </div>
             </>
           ) : (
-            <div className="text-slate-600">No reports yet. Generate from Admin → Report Generation.</div>
+            <div className="text-slate-600">
+              No reports yet. Generate from Admin → Report Generation.
+            </div>
           )}
         </div>
       </div>
