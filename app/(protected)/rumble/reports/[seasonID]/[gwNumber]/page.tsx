@@ -1,166 +1,116 @@
+// app/(protected)/rumble/reports/[seasonID]/[gwNumber]/page.tsx
 import React from "react";
-import { notFound } from "next/navigation";
 import { db } from "@/src/lib/db";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-type ClubRow = { clubShort: string; count: number };
-type SourceRow = { source: "manual" | "proxy"; count: number };
+type PageParams = { seasonID: string; gwNumber: string };
 
-async function getCounts(seasonId: string, gwNumber: number, payload: any) {
-  // 1) Prefer counts already saved in the payload (if your generator writes them)
-  const pClub = payload?.clubCounts as ClubRow[] | undefined;
-  const pSource = payload?.sourceCounts as SourceRow[] | undefined;
-  const pTotal = payload?.totalPicks as number | undefined;
-  if (pClub && pSource && typeof pTotal === "number") {
-    return { clubCounts: pClub, sourceCounts: pSource, totalPicks: pTotal };
+async function fetchReport(seasonId: string, gwNumber: number) {
+  // Try prebuilt report first
+  const report = await db.rumbleReport.findFirst({
+    where: { seasonId, gwNumber },
+    select: {
+      seasonId: true,
+      gwNumber: true,
+      updatedAt: true,
+      countsJson: true,
+      bySourceJson: true,
+      // Add any other fields your page uses (e.g., chart URLs)
+    } as any,
+  });
+
+  if (report) return { report, fallback: null };
+
+  // Fallback: compute from picks
+  const picks = await db.pick.findMany({
+    where: { seasonId, gw: { number: gwNumber } }, // <-- relation filter (fix)
+    select: {
+      clubId: true,
+      source: true, // <-- correct field
+      club: { select: { shortName: true, name: true } }, // <-- shortName not short
+    },
+  });
+
+  const countsMap = new Map<string, number>();
+  let userCount = 0;
+  let proxyCount = 0;
+
+  for (const p of picks) {
+    const label = p.club?.shortName ?? p.club?.name ?? p.clubId;
+    countsMap.set(label, (countsMap.get(label) ?? 0) + 1);
+    if (p.source === "USER") userCount += 1;
+    else if (p.source === "PROXY") proxyCount += 1;
   }
 
-  // 2) Fallback: best-effort runtime query against whichever model exists
-  try {
-    const anyDb = db as any;
-    const candidates = ["rumblePick", "pick", "picks", "RumblePick", "Pick"];
-    let picks: any[] = [];
-    for (const c of candidates) {
-      if (anyDb?.[c]?.findMany) {
-        picks = await anyDb[c].findMany({
-          where: { seasonId, gwNumber },
-          select: {
-            submissionSource: true,   // "manual" | "proxy" (or similar)
-            clubShort: true,          // if present on pick
-            clubId: true,
-            club: { select: { short: true, name: true } },
-          },
-        });
-        break;
-      }
-    }
+  const counts = Array.from(countsMap.entries())
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => a.label.localeCompare(b.label));
 
-    const clubMap = new Map<string, number>();
-    for (const pk of picks) {
-      const short = pk?.club?.short ?? pk?.clubShort ?? pk?.clubId ?? "UNK";
-      clubMap.set(short, (clubMap.get(short) ?? 0) + 1);
-    }
-    const clubCounts: ClubRow[] = [...clubMap.entries()]
-      .map(([clubShort, count]) => ({ clubShort, count }))
-      .sort((a, b) => b.count - a.count);
-
-    const srcCount: Record<"manual" | "proxy", number> = { manual: 0, proxy: 0 };
-    for (const pk of picks) {
-      const key = pk?.submissionSource === "proxy" ? "proxy" : "manual";
-      srcCount[key]++;
-    }
-    const sourceCounts: SourceRow[] =
-      (Object.entries(srcCount) as [("manual" | "proxy"), number][])
-        .map(([source, count]) => ({ source, count }))
-        .sort((a, b) => b.count - a.count);
-
-    return { clubCounts, sourceCounts, totalPicks: picks.length };
-  } catch {
-    return { clubCounts: [], sourceCounts: [], totalPicks: 0 };
-  }
+  return {
+    report: null,
+    fallback: {
+      counts,
+      bySource: { USER: userCount, PROXY: proxyCount },
+      computedAt: new Date().toISOString(),
+    },
+  };
 }
 
-export default async function PublicReportView(
-  { params }: { params: { seasonID: string; gwNumber: string } } // note: folder is [seasonID]
-) {
-  const seasonId = decodeURIComponent(params.seasonID);
+export default async function Page({ params }: { params: PageParams }) {
+  const seasonId = params.seasonID;
   const gwNumber = Number(params.gwNumber);
-  if (!seasonId || Number.isNaN(gwNumber)) notFound();
+  const data = await fetchReport(seasonId, gwNumber);
 
-  const rep = await db.rumbleReport.findUnique({
-    where: { seasonId_gwNumber: { seasonId, gwNumber } },
-    select: { payload: true, seasonId: true, gwNumber: true, updatedAt: true },
-  });
-  if (!rep) notFound();
-
-  const payload = (rep.payload as any) ?? {};
-  const clubPieUrl = payload?.clubPieUrl as string | undefined;
-  const sourcePieUrl = payload?.sourcePieUrl as string | undefined;
-  const eliminatedSvg = payload?.eliminatedSvg as string | undefined;
-
-  const { clubCounts, sourceCounts, totalPicks } = await getCounts(seasonId, gwNumber, payload);
+  const counts = data.report?.countsJson ?? data.fallback?.counts ?? [];
+  const bySource = (data.report?.bySourceJson as any) ?? data.fallback?.bySource ?? { USER: 0, PROXY: 0 };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-semibold">{rep.seasonId} - GW {rep.gwNumber}</h1>
-        <p className="text-sm text-slate-600">Last updated {rep.updatedAt.toISOString()}</p>
-      </div>
+    <div className="max-w-5xl mx-auto px-4 py-8">
+      <h1 className="text-2xl font-semibold mb-4">GW {gwNumber} — Report</h1>
 
-      <div className="grid md:grid-cols-2 gap-6">
-        <div className="border rounded p-4">
-          <h2 className="font-medium mb-2">Picks by Club</h2>
-          {clubPieUrl ? (
-            <>
-              <img src={clubPieUrl} alt="Picks by Club" className="w-full h-auto mb-3" />
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left border-b">
-                    <th className="py-1">Club</th>
-                    <th className="py-1 text-right">Count</th>
-                    <th className="py-1 text-right">Share</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {clubCounts.map(({ clubShort, count }) => (
-                    <tr key={clubShort} className="border-b last:border-b-0">
-                      <td className="py-1">{clubShort}</td>
-                      <td className="py-1 text-right">{count}</td>
-                      <td className="py-1 text-right">
-                        {totalPicks ? ((count * 100) / totalPicks).toFixed(1) + "%" : "—"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </>
+      <div className="grid gap-6 md:grid-cols-2">
+        <div className="rounded-2xl border p-5 bg-white/70">
+          <h2 className="font-semibold mb-2">Picks by Club</h2>
+          {counts.length ? (
+            <ul className="space-y-1">
+              {counts.map((row: any) => (
+                <li key={row.label} className="flex justify-between">
+                  <span>{row.label}</span>
+                  <span className="font-semibold">{row.value}</span>
+                </li>
+              ))}
+            </ul>
           ) : (
-            <p>No data.</p>
+            <div className="text-slate-600">No data.</div>
           )}
         </div>
 
-        <div className="border rounded p-4">
-          <h2 className="font-medium mb-2">Manual vs Proxy</h2>
-          {sourcePieUrl ? (
-            <>
-              <img src={sourcePieUrl} alt="Manual vs Proxy" className="w-full h-auto mb-3" />
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left border-b">
-                    <th className="py-1">Source</th>
-                    <th className="py-1 text-right">Count</th>
-                    <th className="py-1 text-right">Share</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sourceCounts.map(({ source, count }) => (
-                    <tr key={source} className="border-b last:border-b-0">
-                      <td className="py-1">{source === "proxy" ? "Proxy" : "Manual"}</td>
-                      <td className="py-1 text-right">{count}</td>
-                      <td className="py-1 text-right">
-                        {totalPicks ? ((count * 100) / totalPicks).toFixed(1) + "%" : "—"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </>
-          ) : (
-            <p>No data.</p>
-          )}
+        <div className="rounded-2xl border p-5 bg-white/70">
+          <h2 className="font-semibold mb-2">Submissions by Source</h2>
+          <ul className="space-y-1">
+            <li className="flex justify-between">
+              <span>User picks</span>
+              <span className="font-semibold">{bySource.USER ?? 0}</span>
+            </li>
+            <li className="flex justify-between">
+              <span>Proxy picks</span>
+              <span className="font-semibold">{bySource.PROXY ?? 0}</span>
+            </li>
+          </ul>
         </div>
       </div>
 
-      <div className="border rounded p-4">
-        <h2 className="font-medium mb-2">Eliminations</h2>
-        {eliminatedSvg ? (
-          <div dangerouslySetInnerHTML={{ __html: eliminatedSvg }} />
-        ) : (
-          <p>Eliminations appear once this gameweek is graded.</p>
-        )}
-      </div>
+      {data.report ? (
+        <p className="mt-6 text-sm text-slate-500">
+          Report generated at: {new Date(data.report.updatedAt as any).toLocaleString()}
+        </p>
+      ) : (
+        <p className="mt-6 text-sm text-slate-500">
+          Live fallback (no stored report). Computed at: {data.fallback?.computedAt}
+        </p>
+      )}
     </div>
   );
 }
