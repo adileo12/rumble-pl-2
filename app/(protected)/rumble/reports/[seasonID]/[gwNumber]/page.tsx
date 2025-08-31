@@ -1,3 +1,107 @@
+// app/rumble/reports/[seasonId]/[gwNumber]/page.tsx
+import { notFound } from "next/navigation";
+import { db } from "@/src/lib/db";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+function fmtDate(d?: Date | string | null) {
+  if (!d) return "—";
+  const dt = typeof d === "string" ? new Date(d) : d;
+  return dt.toLocaleString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+type RouteParams = { params: { seasonId: string; gwNumber: string } };
+
+export default async function ReportPage({ params }: RouteParams) {
+  // Robust params
+  const seasonId = decodeURIComponent(params.seasonId || "");
+  const gwNumber = Number.parseInt(params.gwNumber || "", 10);
+
+  if (!seasonId || !Number.isFinite(gwNumber)) {
+    // Bad URL → 404 instead of server error
+    notFound();
+  }
+
+  // Fetch the report safely; only select fields we actually render
+  // If your schema uses a different model name, adjust `db.rumbleReport`.
+  const report = await db.rumbleReport.findFirst({
+    where: { seasonId, gwNumber },
+    select: {
+      seasonId: true,
+      gwNumber: true,
+      updatedAt: true,
+      // OPTIONAL JSON-ish fields — these are guarded at runtime below.
+      // Adjust names to match your schema (e.g., data, payload, summary, topPicks, eliminations, etc.)
+      title: true,
+      summary: true,
+      payload: true as any, // tolerate absence; TS will see `any`
+      data: true as any,
+      json: true as any,
+    },
+  });
+
+  if (!report) {
+    // Friendly empty state instead of exception
+    return (
+      <div className="max-w-4xl mx-auto px-4 py-10">
+        <h1 className="text-2xl font-semibold mb-2">Report not found</h1>
+        <p className="text-slate-700">
+          We couldn’t find a report for season <code className="px-1 py-0.5 bg-slate-100 rounded">{seasonId}</code> &nbsp;
+          gameweek <strong>GW {gwNumber}</strong>. It may not have been generated yet.
+        </p>
+      </div>
+    );
+  }
+
+  // Try to discover a data blob if your schema stores it.
+  // We check a few common field names and fall back to nothing.
+  const blob =
+    (report as any).payload ??
+    (report as any).data ??
+    (report as any).json ??
+    null;
+
+  return (
+    <div className="max-w-5xl mx-auto px-4 py-8">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold">
+          Rumble Report — GW {report.gwNumber}
+        </h1>
+        <div className="text-slate-600">
+          Season: <span className="font-mono">{report.seasonId}</span> • Updated: {fmtDate(report.updatedAt)}
+        </div>
+        {report.title ? (
+          <div className="mt-2 text-lg font-semibold">{report.title}</div>
+        ) : null}
+        {report.summary ? (
+          <p className="mt-2 text-slate-700">{report.summary}</p>
+        ) : null}
+      </div>
+
+      {/* Minimal, robust rendering. Add richer UI later once fields are confirmed */}
+      {blob ? (
+        <div className="rounded-xl border bg-white p-4">
+          <h2 className="font-semibold mb-2">Details</h2>
+          <pre className="whitespace-pre-wrap text-sm overflow-x-auto">
+            {JSON.stringify(blob, null, 2)}
+          </pre>
+        </div>
+      ) : (
+        <div className="rounded-xl border bg-white p-4 text-slate-700">
+          No structured details were attached to this report.
+        </div>
+      )}
+    </div>
+  );
+}
 // app/(protected)/rumble/reports/[seasonID]/[gwNumber]/page.tsx
 import React from "react";
 import { db } from "@/src/lib/db";
