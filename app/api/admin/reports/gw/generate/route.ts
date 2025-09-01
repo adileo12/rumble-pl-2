@@ -45,7 +45,8 @@ export async function POST(req: Request) {
 
     // Generate + persist the report payload
     const res = await generateGwReportCore({ seasonId: gw.seasonId, gwNumber: gw.number });
-    return NextResponse.json({ ok: true, ...res });
+return NextResponse.json(res);
+
   } catch (err: any) {
     console.error("REPORT-GENERATE ERROR:", err);
     return NextResponse.json({ ok: false, error: err?.message ?? "Internal error" }, { status: 500 });
