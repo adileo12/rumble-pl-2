@@ -5,10 +5,11 @@ import { eliminationSVG } from "@/src/lib/svg";
 
 export type GeneratedPayload = {
   clubPieUrl: string;
-  // legacy/admin fields
+  // legacy/admin fields (used by admin GW page tables)
   clubCounts?: { clubShort: string; count: number }[];
   sourceCounts?: { source: "manual" | "proxy"; count: number }[];
   totalPicks?: number;
+  // players page fields
   sourcePieUrl: string;
   counts: { label: string; value: number }[];
   bySource: { USER: number; PROXY: number };
@@ -30,53 +31,46 @@ export async function generateGwReportCore(params: { seasonId: string; gwNumber:
   if (!gw) throw new Error("Gameweek not found");
   if (gw.deadline > new Date()) throw new Error("Deadline has not passed");
 
-  // Picks by club
+  // --- Picks by club (grouped) ---
   const clubCounts = await db.pick.groupBy({
     by: ["clubId"],
     where: { seasonId, gwId: gw.id },
     _count: { clubId: true },
   });
+
+  // Resolve display labels from Club metadata (short > shortName > name > id)
   const clubIds = clubCounts.map((r) => r.clubId);
   const clubs = clubIds.length
     ? await db.club.findMany({
         where: { id: { in: clubIds } },
-        select: { id: true, shortName: true, name: true },
+        // Be tolerant of either "short" or "shortName" in your schema
+        select: { id: true, short: true as any, shortName: true as any, name: true },
       })
     : [];
-  const clubMeta = new Map(clubs.map((c) => [c.id, c]));
-  const clubLabels = clubCounts.map((r) => {
-    const c = clubMeta.get(r.clubId);
-    return c?.shortName ?? c?.name ?? r.clubId;
-  });
+  const clubShortById = new Map<string, string>(
+    clubs.map((c: any) => [c.id, (c.short ?? c.shortName ?? c.name ?? "").toString()])
+  );
+
+  const clubLabels = clubCounts.map((r) => clubShortById.get(r.clubId) ?? r.clubId);
   const clubData = clubCounts.map((r) => r._count.clubId);
   const clubPieUrl = quickChartUrl(`Picks by club — GW ${gwNumber}`, clubLabels, clubData);
 
-  // Build legacy/admin arrays too
-  const legacyClubCounts = clubCounts.map(r => ({ clubShort: r.label, count: r._count.clubId })).sort((a,b)=>b.count-a.count);
-  const legacySourceCounts = [
-    { source: "manual" as const, count: sourceMap["USER"] ?? 0 },
-    { source: "proxy"  as const, count: sourceMap["PROXY"] ?? 0 },
-  ];
-  const legacyTotal = clubData.reduce((a,b)=>a+b,0);
-
-  // Manual vs Proxy
-  const sourceCounts = await db.pick.groupBy({
+  // --- Manual vs Proxy ---
+  const sourceCountsRaw = await db.pick.groupBy({
     by: ["source"], // "USER" | "PROXY"
     where: { seasonId, gwId: gw.id },
     _count: { source: true },
   });
-  const sourceMap: Record<string, number> = {};
-  for (const r of sourceCounts) {
-    const key = (r.source || "").toUpperCase();
-    sourceMap[key] = r._count.source;
+  const sourceMap: Record<"USER" | "PROXY", number> = { USER: 0, PROXY: 0 };
+  for (const r of sourceCountsRaw) {
+    const key = ((r as any).source || "").toUpperCase() as "USER" | "PROXY";
+    if (key === "USER" || key === "PROXY") sourceMap[key] = (r as any)._count.source;
   }
-  const sourcePieUrl = quickChartUrl(
-    `Manual vs Proxy — GW ${gwNumber}`,
-    ["Manual", "Proxy"],
-    [sourceMap["USER"] ?? 0, sourceMap["PROXY"] ?? 0]
-  );
+  const sourceLabels = ["Manual", "Proxy"];
+  const sourceData = [sourceMap.USER ?? 0, sourceMap.PROXY ?? 0];
+  const sourcePieUrl = quickChartUrl(`Manual vs Proxy — GW ${gwNumber}`, sourceLabels, sourceData);
 
-  // Eliminations (only if graded)
+  // --- Eliminations (only if graded) ---
   let eliminatedSvg: string | undefined;
   if (gw.graded) {
     const eliminatedStates = await db.rumbleState.findMany({
@@ -95,19 +89,42 @@ export async function generateGwReportCore(params: { seasonId: string; gwNumber:
     const names = userIds.map((id) => {
       const u = userMeta.get(id);
       const emailPrefix = u?.email ? u.email.split("@")[0] : "";
-      return u?.name?.trim() || emailPrefix || "Unknown";
+      return (u?.name?.trim() || emailPrefix || "Unknown") as string;
     });
     eliminatedSvg = eliminationSVG({ seasonId, gwNumber, names });
   }
 
+  // --- Admin-compatible arrays (legacy shape) ---
+  const legacyClubCounts = clubCounts
+    .map((r) => ({
+      clubShort: clubShortById.get(r.clubId) ?? "UNK",
+      count: r._count.clubId,
+    }))
+    .sort((a, b) => b.count - a.count);
+
+  const legacySourceCounts = [
+    { source: "manual" as const, count: sourceMap.USER ?? 0 },
+    { source: "proxy" as const, count: sourceMap.PROXY ?? 0 },
+  ];
+
+  const legacyTotal = clubData.reduce((a, b) => a + b, 0);
+
+  // --- Players page shape ---
+  const counts = clubCounts.map((r) => ({
+    label: clubShortById.get(r.clubId) ?? "UNK",
+    value: r._count.clubId,
+  }));
+  const bySource = { USER: sourceMap.USER ?? 0, PROXY: sourceMap.PROXY ?? 0 };
+
+  // --- Final payload (stores both formats) ---
   const payload: GeneratedPayload = {
     clubPieUrl,
     sourcePieUrl,
-    counts: clubCounts.map((r: any) => ({ label: r.label, value: r._count.clubId })),
+    counts,
+    bySource,
     clubCounts: legacyClubCounts,
     sourceCounts: legacySourceCounts,
     totalPicks: legacyTotal,
-    bySource: { USER: sourceMap["USER"] ?? 0, PROXY: sourceMap["PROXY"] ?? 0 },
     ...(eliminatedSvg ? { eliminatedSvg } : {}),
   };
 
