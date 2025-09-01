@@ -32,10 +32,12 @@ async function fetchReportOrFallback(seasonId: string, gwNumber: number) {
   });
 
   if (stored) {
+    const anyPayload = (stored as any).payload ?? {};
+
     // Try to extract precomputed blobs if present; otherwise UI will still render safely.
     const anyStored = stored as any;
-    const counts = anyStored.countsJson ?? null;
-    const bySource = anyStored.bySourceJson ?? null;
+    const counts = anyStored.countsJson ?? anyPayload.counts ?? null;
+    const bySource = anyStored.bySourceJson ?? anyPayload.bySource ?? null;
 
     return {
       source: "stored" as const,
@@ -104,6 +106,9 @@ export default async function Page({ params }: PageParams) {
       <div className="grid gap-6 md:grid-cols-2">
         <div className="rounded-2xl border p-5 bg-white/70">
           <h2 className="font-semibold mb-2">Picks by Club</h2>
+          { (data as any).clubPieUrl && (
+            <img src={(data as any).clubPieUrl} alt="Picks by Club" className="w-full h-auto mb-3"/>
+          )}
           {counts.length ? (
             <ul className="space-y-1">
               {counts.map((row: any) => (
