@@ -6,7 +6,7 @@ import { eliminationSVG } from "@/src/lib/svg";
 export type GeneratedPayload = {
   clubPieUrl: string;
   // legacy/admin fields (used by admin GW page tables)
-  clubCounts?: { clubShort: string; count: number }[];
+  clubCounts?: { clubShort: string; clubName?: string; count: number }[];
   sourceCounts?: { source: "manual" | "proxy"; count: number }[];
   totalPicks?: number;
   // players page fields
@@ -94,12 +94,13 @@ export async function generateGwReportCore(params: { seasonId: string; gwNumber:
   }
 
   // --- Admin-compatible arrays (legacy shape) ---
-  const legacyClubCounts = clubCounts
-    .map((r) => ({
-      clubShort: clubShortById.get(r.clubId) ?? "UNK",
-      count: r._count.clubId,
-    }))
-    .sort((a, b) => b.count - a.count);
+ const legacyClubCounts = clubCounts
+  .map((r) => {
+    const short = clubShortById.get(r.clubId) ?? "UNK";
+    const full = clubs.find((c) => c.id === r.clubId)?.name ?? short;
+    return { clubShort: short, clubName: full, count: r._count.clubId };
+  })
+  .sort((a, b) => b.count - a.count);
 
   const legacySourceCounts = [
     { source: "manual" as const, count: sourceMap.USER ?? 0 },
