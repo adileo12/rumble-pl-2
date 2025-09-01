@@ -26,7 +26,7 @@ function FileButton({
   );
 }
 
-type ClubRow = { clubShort: string; count: number };
+type ClubRow = { clubShort: string; clubName?: string; count: number }
 type SourceRow = { source: "manual" | "proxy"; count: number };
 
 function aggregateCounts(picks: any[]) {
