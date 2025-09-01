@@ -26,33 +26,8 @@ function FileButton({
   );
 }
 
-type ClubRow = { clubShort: string; clubName?: string; count: number }
+type ClubRow = { clubShort: string; clubName?: string; count: number };
 type SourceRow = { source: "manual" | "proxy"; count: number };
-
-function aggregateCounts(picks: any[]) {
-  const clubMap = new Map<string, number>();
-  for (const pk of picks) {
-    const short = pk?.club?.short ?? pk?.clubShort ?? pk?.clubId ?? "UNK";
-    clubMap.set(short, (clubMap.get(short) ?? 0) + 1);
-  }
-  const clubCounts: ClubRow[] = [...clubMap.entries()]
-    .map(([clubShort, count]) => ({ clubShort, count }))
-    .sort((a, b) => b.count - a.count);
-
-  const srcCount: Record<"manual" | "proxy", number> = { manual: 0, proxy: 0 };
-  for (const pk of picks) {
-    const key = pk?.submissionSource === "proxy" ? "proxy" : "manual";
-    srcCount[key]++;
-  }
-  const sourceCounts: SourceRow[] = (Object.entries(srcCount) as [(
-    | "manual"
-    | "proxy"
-  ), number][])
-    .map(([source, count]) => ({ source, count }))
-    .sort((a, b) => b.count - a.count);
-
-  return { clubCounts, sourceCounts, totalPicks: picks.length };
-}
 
 async function getCountsSafe(
   seasonId: string,
@@ -69,71 +44,81 @@ async function getCountsSafe(
 
   // 2) Otherwise, adapt the players-page shape to admin shape
   const counts = payload?.counts as { label: string; value: number }[] | undefined;
-const bySource = payload?.bySource as { USER?: number; PROXY?: number } | undefined;
-if (Array.isArray(counts) && counts.length) {
-  // Try to resolve full names from DB using shortName
-  const labels = [...new Set(counts.map((c) => c.label).filter(Boolean))] as string[];
-  const clubsByShort: Record<string, string> = {};
-  if (labels.length) {
-    const clubs = await db.club.findMany({
-      where: { shortName: { in: labels } },
-      select: { shortName: true, name: true },
-    });
-    for (const c of clubs) clubsByShort[c.shortName] = c.name ?? c.shortName;
+  const bySource = payload?.bySource as { USER?: number; PROXY?: number } | undefined;
+  if (Array.isArray(counts) && counts.length) {
+    // Resolve full names from DB using shortName labels (best-effort)
+    const labels = [...new Set(counts.map((c) => c.label).filter(Boolean))] as string[];
+    const clubsByShort: Record<string, string> = {};
+    if (labels.length) {
+      const clubs = await db.club.findMany({
+        where: { shortName: { in: labels } },
+        select: { shortName: true, name: true },
+      });
+      for (const c of clubs) clubsByShort[c.shortName] = c.name ?? c.shortName;
+    }
+
+    const clubCounts: ClubRow[] = counts
+      .map((c) => ({
+        clubShort: c.label,
+        clubName: clubsByShort[c.label],
+        count: Number(c.value || 0),
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    const user = Number(bySource?.USER || 0);
+    const proxy = Number(bySource?.PROXY || 0);
+    const sourceCounts: SourceRow[] = [
+      { source: "manual", count: user },
+      { source: "proxy", count: proxy },
+    ];
+
+    const totalFromCounts = clubCounts.reduce((s, r) => s + r.count, 0);
+    const totalFromSource = user + proxy;
+    const totalPicks = totalFromCounts || totalFromSource;
+
+    return { clubCounts, sourceCounts, totalPicks };
   }
 
-  const clubCounts: ClubRow[] = counts
-    .map((c) => ({
-      clubShort: c.label,
-      clubName: clubsByShort[c.label],
-      count: Number(c.value || 0),
-    }))
-    .sort((a, b) => b.count - a.count);
-
-  const user = Number(bySource?.USER || 0);
-  const proxy = Number(bySource?.PROXY || 0);
-  const sourceCounts: SourceRow[] = [
-    { source: "manual", count: user },
-    { source: "proxy", count: proxy },
-  ];
-
-  const totalFromCounts = clubCounts.reduce((s, r) => s + r.count, 0);
-  const totalFromSource = user + proxy;
-  const totalPicks = totalFromCounts || totalFromSource;
-
-  return { clubCounts, sourceCounts, totalPicks };
-}
-
-  // 3) Fallback: compute live from DB (existing logic below stays the same)
+  // 3) Fallback: compute live from DB
   const anyDb = db as any;
-
   try {
-    // Try a shape that includes Club join
     const picks = await anyDb.pick.findMany({
       where: { seasonId, gameweek: { number: gwNumber } },
-      select: { clubId: true, source: true, club: { select: { shortName: true, name: true } } },
+      select: {
+        clubId: true,
+        source: true,
+        club: { select: { shortName: true, name: true } },
+      },
     });
 
-    const clubMap = new Map<string, number>();
+    const clubCountByShort = new Map<string, number>();
+    const clubNameByShort = new Map<string, string>();
     const srcCount = { manual: 0, proxy: 0 };
+
     for (const p of picks) {
-      const label = p.club?.shortName ?? p.club?.name ?? p.clubId;
-      clubMap.set(label, (clubMap.get(label) ?? 0) + 1);
+      const short = p.club?.shortName ?? p.clubId ?? "UNK";
+      const full = p.club?.name;
+      clubCountByShort.set(short, (clubCountByShort.get(short) ?? 0) + 1);
+      if (full && !clubNameByShort.has(short)) clubNameByShort.set(short, full);
+
       if (p.source === "USER") srcCount.manual += 1;
       else if (p.source === "PROXY") srcCount.proxy += 1;
     }
 
-    const clubCounts: ClubRow[] = [...clubMap.entries()]
-      .map(([clubShort, count]) => ({ clubShort, count }))
+    const clubCounts: ClubRow[] = [...clubCountByShort.entries()]
+      .map(([clubShort, count]) => ({
+        clubShort,
+        clubName: clubNameByShort.get(clubShort),
+        count,
+      }))
       .sort((a, b) => b.count - a.count);
 
-    const sourceCounts: SourceRow[] = (Object.entries(srcCount) as (["manual" | "proxy", number])[]).map(
-      ([source, count]) => ({ source, count })
-    );
+    const sourceCounts: SourceRow[] = (Object.entries(srcCount) as (["manual" | "proxy", number])[])
+      .map(([source, count]) => ({ source, count }))
+      .sort((a, b) => b.count - a.count);
 
     return { clubCounts, sourceCounts, totalPicks: picks.length };
   } catch {
-    // Minimal fallback
     return { clubCounts: [], sourceCounts: [], totalPicks: 0 };
   }
 }
@@ -166,19 +151,13 @@ export default async function ReportView({
 
   // Admin-only download links (PNG for all three)
   const clubDl = clubPieUrl
-    ? `/api/admin/reports/${encodeURIComponent(
-        seasonId
-      )}/${gwNumber}/download?type=club`
+    ? `/api/admin/reports/${encodeURIComponent(seasonId)}/${gwNumber}/download?type=club`
     : null;
   const sourceDl = sourcePieUrl
-    ? `/api/admin/reports/${encodeURIComponent(
-        seasonId
-      )}/${gwNumber}/download?type=source`
+    ? `/api/admin/reports/${encodeURIComponent(seasonId)}/${gwNumber}/download?type=source`
     : null;
   const elimDl = eliminatedSvg
-    ? `/api/admin/reports/${encodeURIComponent(
-        seasonId
-      )}/${gwNumber}/download?type=elims`
+    ? `/api/admin/reports/${encodeURIComponent(seasonId)}/${gwNumber}/download?type=elims`
     : null;
 
   return (
@@ -192,10 +171,7 @@ export default async function ReportView({
             Last updated {report.updatedAt.toISOString()}
           </p>
         </div>
-        <Link
-          href="/admin/rumble/report-generation"
-          className="text-sm underline"
-        >
+        <Link href="/admin/rumble/report-generation" className="text-sm underline">
           ← Back
         </Link>
       </div>
@@ -216,14 +192,10 @@ export default async function ReportView({
 
           {clubPieUrl ? (
             <>
-              <img
-                src={clubPieUrl}
-                alt="Picks by Club"
-                className="w-full h-auto mb-3"
-              />
+              <img src={clubPieUrl} alt="Picks by Club" className="w-full h-auto mb-3" />
               <CountsTable
-                rows={clubCounts.map(({ clubShort, count }) => ({
-                  label: clubShort,
+                rows={clubCounts.map(({ clubShort, clubName, count }) => ({
+                  label: clubName ? `${clubShort} — ${clubName}` : clubShort,
                   count,
                   pct: totalPicks ? (count * 100) / totalPicks : null,
                 }))}
@@ -251,11 +223,7 @@ export default async function ReportView({
 
           {sourcePieUrl ? (
             <>
-              <img
-                src={sourcePieUrl}
-                alt="Manual vs Proxy"
-                className="w-full h-auto mb-3"
-              />
+              <img src={sourcePieUrl} alt="Manual vs Proxy" className="w-full h-auto mb-3" />
               <CountsTable
                 rows={sourceCounts.map(({ source, count }) => ({
                   label: source === "proxy" ? "Proxy" : "Manual",
@@ -276,13 +244,13 @@ export default async function ReportView({
       <div className="border rounded p-4">
         <div className="flex items-center justify-between">
           <h2 className="font-medium mb-2">Eliminations</h2>
-        {elimDl && (
-          <FileButton
-            href={elimDl}
-            filename={`${seasonId}-GW${gwNumber}-eliminations.png`}
-            label="Download PNG"
-          />
-        )}
+          {elimDl && (
+            <FileButton
+              href={elimDl}
+              filename={`${seasonId}-GW${gwNumber}-eliminations.png`}
+              label="Download PNG"
+            />
+          )}
         </div>
         {eliminatedSvg ? (
           <div dangerouslySetInnerHTML={{ __html: eliminatedSvg }} />
