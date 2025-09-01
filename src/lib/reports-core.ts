@@ -5,6 +5,10 @@ import { eliminationSVG } from "@/src/lib/svg";
 
 export type GeneratedPayload = {
   clubPieUrl: string;
+  // legacy/admin fields
+  clubCounts?: { clubShort: string; count: number }[];
+  sourceCounts?: { source: "manual" | "proxy"; count: number }[];
+  totalPicks?: number;
   sourcePieUrl: string;
   counts: { label: string; value: number }[];
   bySource: { USER: number; PROXY: number };
@@ -46,6 +50,14 @@ export async function generateGwReportCore(params: { seasonId: string; gwNumber:
   });
   const clubData = clubCounts.map((r) => r._count.clubId);
   const clubPieUrl = quickChartUrl(`Picks by club — GW ${gwNumber}`, clubLabels, clubData);
+
+  // Build legacy/admin arrays too
+  const legacyClubCounts = clubCounts.map(r => ({ clubShort: r.label, count: r._count.clubId })).sort((a,b)=>b.count-a.count);
+  const legacySourceCounts = [
+    { source: "manual" as const, count: sourceMap["USER"] ?? 0 },
+    { source: "proxy"  as const, count: sourceMap["PROXY"] ?? 0 },
+  ];
+  const legacyTotal = clubData.reduce((a,b)=>a+b,0);
 
   // Manual vs Proxy
   const sourceCounts = await db.pick.groupBy({
@@ -92,6 +104,9 @@ export async function generateGwReportCore(params: { seasonId: string; gwNumber:
     clubPieUrl,
     sourcePieUrl,
     counts: clubCounts.map((r: any) => ({ label: r.label, value: r._count.clubId })),
+    clubCounts: legacyClubCounts,
+    sourceCounts: legacySourceCounts,
+    totalPicks: legacyTotal,
     bySource: { USER: sourceMap["USER"] ?? 0, PROXY: sourceMap["PROXY"] ?? 0 },
     ...(eliminatedSvg ? { eliminatedSvg } : {}),
   };
