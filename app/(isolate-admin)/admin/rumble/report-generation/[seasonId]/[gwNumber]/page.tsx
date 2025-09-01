@@ -59,53 +59,68 @@ async function getCountsSafe(
   gwNumber: number,
   payload: any
 ): Promise<{ clubCounts: ClubRow[]; sourceCounts: SourceRow[]; totalPicks: number }> {
-  // 1) Prefer counts already saved in payload
+  // 1) Prefer legacy/admin fields if present (exactly what this page expects)
   const pClub = payload?.clubCounts as ClubRow[] | undefined;
   const pSource = payload?.sourceCounts as SourceRow[] | undefined;
   const pTotal = payload?.totalPicks as number | undefined;
-  if (pClub && pSource && typeof pTotal === "number") {
+  if (Array.isArray(pClub) && Array.isArray(pSource) && typeof pTotal === "number") {
     return { clubCounts: pClub, sourceCounts: pSource, totalPicks: pTotal };
   }
 
-  // 2) Fallback: query whichever Pick model exists; try a couple of select shapes
-  const anyDb = db as any;
-  const candidates = ["rumblePick", "pick", "picks", "RumblePick", "Pick"];
+  // 2) Otherwise, adapt the players-page shape to admin shape
+  const counts = payload?.counts as { label: string; value: number }[] | undefined;
+  const bySource = payload?.bySource as { USER?: number; PROXY?: number } | undefined;
+  if (Array.isArray(counts) && counts.length) {
+    const clubCounts: ClubRow[] = counts
+      .map((c) => ({ clubShort: c.label, count: Number(c.value || 0) }))
+      .sort((a, b) => b.count - a.count);
 
-  for (const model of candidates) {
-    if (!anyDb?.[model]?.findMany) continue;
+    const user = Number(bySource?.USER || 0);
+    const proxy = Number(bySource?.PROXY || 0);
+    const sourceCounts: SourceRow[] = [
+      { source: "manual", count: user },
+      { source: "proxy", count: proxy },
+    ];
 
-    // Try with relation
-    try {
-      const picks = await anyDb[model].findMany({
-        where: { seasonId, gwNumber },
-        select: {
-          submissionSource: true,
-          clubShort: true,
-          clubId: true,
-          club: { select: { short: true } },
-        },
-      });
-      return aggregateCounts(picks);
-    } catch {
-      // Try without relation
-      try {
-        const picks = await anyDb[model].findMany({
-          where: { seasonId, gwNumber },
-          select: {
-            submissionSource: true,
-            clubShort: true,
-            clubId: true,
-          },
-        });
-        return aggregateCounts(picks);
-      } catch {
-        // keep looping
-      }
-    }
+    const totalFromCounts = clubCounts.reduce((s, r) => s + r.count, 0);
+    const totalFromSource = user + proxy;
+    const totalPicks = totalFromCounts || totalFromSource;
+
+    return { clubCounts, sourceCounts, totalPicks };
   }
 
-  // 3) Last resort
-  return { clubCounts: [], sourceCounts: [], totalPicks: 0 };
+  // 3) Fallback: compute live from DB (existing logic below stays the same)
+  const anyDb = db as any;
+
+  try {
+    // Try a shape that includes Club join
+    const picks = await anyDb.pick.findMany({
+      where: { seasonId, gameweek: { number: gwNumber } },
+      select: { clubId: true, source: true, club: { select: { shortName: true, name: true } } },
+    });
+
+    const clubMap = new Map<string, number>();
+    const srcCount = { manual: 0, proxy: 0 };
+    for (const p of picks) {
+      const label = p.club?.shortName ?? p.club?.name ?? p.clubId;
+      clubMap.set(label, (clubMap.get(label) ?? 0) + 1);
+      if (p.source === "USER") srcCount.manual += 1;
+      else if (p.source === "PROXY") srcCount.proxy += 1;
+    }
+
+    const clubCounts: ClubRow[] = [...clubMap.entries()]
+      .map(([clubShort, count]) => ({ clubShort, count }))
+      .sort((a, b) => b.count - a.count);
+
+    const sourceCounts: SourceRow[] = (Object.entries(srcCount) as (["manual" | "proxy", number])[]).map(
+      ([source, count]) => ({ source, count })
+    );
+
+    return { clubCounts, sourceCounts, totalPicks: picks.length };
+  } catch {
+    // Minimal fallback
+    return { clubCounts: [], sourceCounts: [], totalPicks: 0 };
+  }
 }
 
 export default async function ReportView({
