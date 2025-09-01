@@ -69,25 +69,40 @@ async function getCountsSafe(
 
   // 2) Otherwise, adapt the players-page shape to admin shape
   const counts = payload?.counts as { label: string; value: number }[] | undefined;
-  const bySource = payload?.bySource as { USER?: number; PROXY?: number } | undefined;
-  if (Array.isArray(counts) && counts.length) {
-    const clubCounts: ClubRow[] = counts
-      .map((c) => ({ clubShort: c.label, count: Number(c.value || 0) }))
-      .sort((a, b) => b.count - a.count);
-
-    const user = Number(bySource?.USER || 0);
-    const proxy = Number(bySource?.PROXY || 0);
-    const sourceCounts: SourceRow[] = [
-      { source: "manual", count: user },
-      { source: "proxy", count: proxy },
-    ];
-
-    const totalFromCounts = clubCounts.reduce((s, r) => s + r.count, 0);
-    const totalFromSource = user + proxy;
-    const totalPicks = totalFromCounts || totalFromSource;
-
-    return { clubCounts, sourceCounts, totalPicks };
+const bySource = payload?.bySource as { USER?: number; PROXY?: number } | undefined;
+if (Array.isArray(counts) && counts.length) {
+  // Try to resolve full names from DB using shortName
+  const labels = [...new Set(counts.map((c) => c.label).filter(Boolean))] as string[];
+  const clubsByShort: Record<string, string> = {};
+  if (labels.length) {
+    const clubs = await db.club.findMany({
+      where: { shortName: { in: labels } },
+      select: { shortName: true, name: true },
+    });
+    for (const c of clubs) clubsByShort[c.shortName] = c.name ?? c.shortName;
   }
+
+  const clubCounts: ClubRow[] = counts
+    .map((c) => ({
+      clubShort: c.label,
+      clubName: clubsByShort[c.label],
+      count: Number(c.value || 0),
+    }))
+    .sort((a, b) => b.count - a.count);
+
+  const user = Number(bySource?.USER || 0);
+  const proxy = Number(bySource?.PROXY || 0);
+  const sourceCounts: SourceRow[] = [
+    { source: "manual", count: user },
+    { source: "proxy", count: proxy },
+  ];
+
+  const totalFromCounts = clubCounts.reduce((s, r) => s + r.count, 0);
+  const totalFromSource = user + proxy;
+  const totalPicks = totalFromCounts || totalFromSource;
+
+  return { clubCounts, sourceCounts, totalPicks };
+}
 
   // 3) Fallback: compute live from DB (existing logic below stays the same)
   const anyDb = db as any;
