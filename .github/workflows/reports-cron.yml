@@ -1,0 +1,25 @@
+name: Reports Cron
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"  # every 15 minutes (GitHub cron runs in UTC)
+  workflow_dispatch:
+
+jobs:
+  call-endpoint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    concurrency:
+      group: reports-cron
+      cancel-in-progress: false
+    steps:
+      - name: Call /api/admin/reports/generate
+        env:
+          BASE_URL: ${{ secrets.BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -e
+          curl -sS -X POST \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${BASE_URL}/api/admin/reports/generate" \
+            | sed 's/.*/[response] &/'
