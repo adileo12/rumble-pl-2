@@ -38,17 +38,16 @@ export async function generateGwReportCore(params: { seasonId: string; gwNumber:
     _count: { clubId: true },
   });
 
-  // Resolve display labels from Club metadata (short > shortName > name > id)
+  // Resolve display labels from Club metadata (shortName > name > id)
   const clubIds = clubCounts.map((r) => r.clubId);
   const clubs = clubIds.length
     ? await db.club.findMany({
         where: { id: { in: clubIds } },
-        // Be tolerant of either "short" or "shortName" in your schema
-        select: { id: true, short: true as any, shortName: true as any, name: true },
+        select: { id: true, shortName: true, name: true },
       })
     : [];
   const clubShortById = new Map<string, string>(
-    clubs.map((c: any) => [c.id, (c.short ?? c.shortName ?? c.name ?? "").toString()])
+    clubs.map((c) => [c.id, (c.shortName ?? c.name ?? "").toString()])
   );
 
   const clubLabels = clubCounts.map((r) => clubShortById.get(r.clubId) ?? r.clubId);
@@ -62,9 +61,9 @@ export async function generateGwReportCore(params: { seasonId: string; gwNumber:
     _count: { source: true },
   });
   const sourceMap: Record<"USER" | "PROXY", number> = { USER: 0, PROXY: 0 };
-  for (const r of sourceCountsRaw) {
-    const key = ((r as any).source || "").toUpperCase() as "USER" | "PROXY";
-    if (key === "USER" || key === "PROXY") sourceMap[key] = (r as any)._count.source;
+  for (const r of sourceCountsRaw as any[]) {
+    const key = ((r?.source ?? "") as string).toUpperCase();
+    if (key === "USER" || key === "PROXY") sourceMap[key] = r._count.source;
   }
   const sourceLabels = ["Manual", "Proxy"];
   const sourceData = [sourceMap.USER ?? 0, sourceMap.PROXY ?? 0];
