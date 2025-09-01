@@ -20,6 +20,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
 
+    // Validate input
     const body = await req.json().catch(() => ({}));
     const seasonId = (body.seasonId ?? "").trim();
     const gwNumber = Number(body.gwNumber);
@@ -27,7 +28,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: "seasonId/gwNumber required" }, { status: 400 });
     }
 
-    // Resolve the exact GW row first
+    // Resolve GW first (we need its id for effectiveDeadline)
     const gw = await db.gameweek.findUnique({
       where: { seasonId_number: { seasonId, number: gwNumber } },
       select: { id: true, number: true, seasonId: true },
@@ -36,5 +37,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: "Gameweek not found" }, { status: 404 });
     }
 
-    // Deadline gate uses GW ID
+    // Gate on deadline using GW ID
     const eff = await effectiveDeadline(gw.id);
+    if (eff && eff.getTime() > Date.now()) {
+      return NextResponse.json({ ok: false, error: "Deadline not passed yet" }, { status: 409 });
+    }
+
+    // Generate + persist the report payload
+    const res = await generateGwReportCore({ seasonId: gw.seasonId, gwNumber: gw.number });
+    return NextResponse.json({ ok: true, ...res });
+  } catch (err: any) {
+    console.error("REPORT-GENERATE ERROR:", err);
+    return NextResponse.json({ ok: false, error: err?.message ?? "Internal error" }, { status: 500 });
+  }
+}
