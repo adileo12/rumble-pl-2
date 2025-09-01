@@ -6,6 +6,8 @@ import { eliminationSVG } from "@/src/lib/svg";
 export type GeneratedPayload = {
   clubPieUrl: string;
   sourcePieUrl: string;
+  counts: { label: string; value: number }[];
+  bySource: { USER: number; PROXY: number };
   eliminatedSvg?: string;
 };
 
@@ -86,7 +88,13 @@ export async function generateGwReportCore(params: { seasonId: string; gwNumber:
     eliminatedSvg = eliminationSVG({ seasonId, gwNumber, names });
   }
 
-  const payload: GeneratedPayload = { clubPieUrl, sourcePieUrl, ...(eliminatedSvg ? { eliminatedSvg } : {}) };
+  const payload: GeneratedPayload = {
+    clubPieUrl,
+    sourcePieUrl,
+    counts: clubCounts.map((r: any) => ({ label: r.label, value: r._count.clubId })),
+    bySource: { USER: sourceMap["USER"] ?? 0, PROXY: sourceMap["PROXY"] ?? 0 },
+    ...(eliminatedSvg ? { eliminatedSvg } : {}),
+  };
 
   // Save (idempotent)
   await db.rumbleReport.upsert({
